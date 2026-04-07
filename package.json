@@ -1,0 +1,25 @@
+{
+  "name": "ovn-production---qr-code-return-materials",
+  "version": "1.0.0",
+  "description": "A web-based system for managing material returns using QR codes.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dothithanhhien5787-dotcom/Return-Materials-app.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/dothithanhhien5787-dotcom/Return-Materials-app/issues"
+  },
+  "homepage": "https://github.com/dothithanhhien5787-dotcom/Return-Materials-app#readme",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.101.1",
+    "xlsx": "^0.18.5"
+  }
+}
