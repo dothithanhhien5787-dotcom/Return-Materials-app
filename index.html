@@ -385,7 +385,7 @@
 
       // 2. Insert into return_logs (individual items for reporting)
       const logs = curData.items.map(item => ({
-        "Thời gian": now,
+        "Ngày tháng": now,
         "Mã RPRO": item.rpro,
         "Vật liệu (U)": item.pu,
         "Số lượng PU (V)": item.puQty,
@@ -521,9 +521,9 @@
       let div = document.getElementById('resLookup');
       if(!data || data.length === 0) { div.innerHTML = "❌ Không tìm thấy mã này"; return; }
       
-      let html = '<div class="table-responsive"><table class="custom-table"><tr><th>Thời gian</th><th>Mã RPRO</th><th>Trạng thái</th></tr>';
+      let html = '<div class="table-responsive"><table class="custom-table"><tr><th>Ngày tháng</th><th>Mã RPRO</th><th>Trạng thái</th></tr>';
       data.forEach(r => { 
-        html += `<tr><td style="font-size:9px">${r["Thời gian"]}</td><td style="font-size:10px">${r["Mã RPRO"]}</td><td>${r["Chờ kho nhận"]}</td></tr>`; 
+        html += `<tr><td style="font-size:9px">${r["Ngày tháng"]}</td><td style="font-size:10px">${r["Mã RPRO"]}</td><td>${r["Chờ kho nhận"]}</td></tr>`; 
       });
       div.innerHTML = html + '</table></div>';
     } catch (err) {
@@ -550,9 +550,9 @@
          return;
       }
 
-      let html = '<div class="table-responsive"><table class="custom-table"><tr><th>Thời gian</th><th>Đơn</th><th>PU</th><th>SL</th><th>Vải</th><th>SL</th></tr>';
+      let html = '<div class="table-responsive"><table class="custom-table"><tr><th>Ngày tháng</th><th>Đơn</th><th>PU</th><th>SL</th><th>Vải</th><th>SL</th></tr>';
       data.forEach(r => {
-        html += `<tr><td style="font-size:9px">${r["Thời gian"]}</td><td style="font-size:10px">${r["Mã RPRO"]}</td><td>${r["Vật liệu (U)"]}</td><td>${r["Số lượng PU (V)"]}</td><td>${r["Vải (W)"]}</td><td>${r["Số lượng Vải (X)"]}</td></tr>`;
+        html += `<tr><td style="font-size:9px">${r["Ngày tháng"]}</td><td style="font-size:10px">${r["Mã RPRO"]}</td><td>${r["Vật liệu (U)"]}</td><td>${r["Số lượng PU (V)"]}</td><td>${r["Vải (W)"]}</td><td>${r["Số lượng Vải (X)"]}</td></tr>`;
       });
       document.getElementById('resRep').innerHTML = html + '</table></div>';
 
@@ -580,7 +580,7 @@
 
       // Prepare data for Excel
       const excelRows = data.map(r => ({
-        "Thời gian": r["Thời gian"],
+        "Ngày tháng": r["Ngày tháng"],
         "Mã RPRO": r["Mã RPRO"],
         "Vật liệu": r["Vật liệu (U)"],
         "Số lượng PU": r["Số lượng PU (V)"],
