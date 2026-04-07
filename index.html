@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://unpkg.com/html5-qrcode"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root {
       --primary: #1a73e8;
@@ -560,8 +561,47 @@
     }
   }
     
-  function downEx() {
-    Swal.fire('Thông báo', 'Tính năng xuất Excel đang được nâng cấp cho Supabase.', 'info');
+  async function downEx() {
+    let f = document.getElementById('fDate').value, t = document.getElementById('tDate').value;
+    if(!f || !t) return Swal.fire('Lỗi', 'Vui lòng chọn ngày để xuất file', 'warning');
+    Swal.fire({title: 'Đang tạo file...', didOpen: () => Swal.showLoading()});
+    
+    try {
+      const { data, error } = await _supabase
+        .from('return_logs')
+        .select('*')
+        .gte('created_at', f)
+        .lte('created_at', t + 'T23:59:59')
+        .order('created_at', { ascending: true });
+
+      Swal.close();
+      if (error) throw error;
+      if(!data || data.length === 0) return Swal.fire('Thông báo', 'Không có dữ liệu trong khoảng ngày này', 'info');
+
+      // Prepare data for Excel
+      const excelRows = data.map(r => ({
+        "Thời gian": r["Thời gian"],
+        "Mã RPRO": r["Mã RPRO"],
+        "Vật liệu": r["Vật liệu (U)"],
+        "Số lượng PU": r["Số lượng PU (V)"],
+        "Vải": r["Vải (W)"],
+        "Số lượng Vải": r["Số lượng Vải (X)"],
+        "Trạng thái": r["Chờ kho nhận"],
+        "Thời gian nhận": r["Thời gian kho nhận"] || ''
+      }));
+
+      // Create Worksheet and Workbook
+      const ws = XLSX.utils.json_to_sheet(excelRows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Báo cáo trả liệu");
+
+      // Generate file and trigger download
+      XLSX.writeFile(wb, `Bao_cao_tra_lieu_${f}_den_${t}.xlsx`);
+
+    } catch (err) {
+      console.error(err);
+      Swal.fire("Lỗi", "Không thể tạo file Excel.", "error");
+    }
   }
 </script>
 </body>
