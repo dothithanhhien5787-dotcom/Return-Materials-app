@@ -336,16 +336,22 @@
           <div class="table-responsive">
             <table class="custom-table">
               <tr>
-                <th style="width:30%">Vật Tư</th>
-                <th>PU / SL</th>
-                <th>Vải / SL</th>
+                <th style="width:20%">Vật Tư</th>
+                <th>Mã PU</th>
+                <th>SL PU</th>
+                <th>Mã Vải</th>
+                <th>SL Vải</th>
+                <th>Tên Vải</th>
               </tr>`;
               
         d.items.forEach(item => {
           matHtml += `<tr>
             <td style="font-size:9px; text-align:left;">${item.rpro.replace(/ \| /g, '<br>')}</td>
-            <td style="color:#2e7d32;">${item.pu}<br><b style="color:red">${item.puQty}</b></td>
-            <td style="color:#1565c0;">${item.vai}<br><b style="color:red">${item.vaiQty}</b></td>
+            <td style="color:#2e7d32;">${item.pu}</td>
+            <td style="color:red;">${item.puQty}</td>
+            <td style="color:#1565c0;">${item.vai}</td>
+            <td style="color:red;">${item.vaiQty}</td>
+            <td style="font-size:9px;">${item.vaiName || ''}</td>
           </tr>`;
         });
         matHtml += "</table></div>";
@@ -410,6 +416,7 @@
           <th>SL PU</th>
           <th>Mã Vải</th>
           <th>SL Vải</th>
+          <th>Tên Vải</th>
           <th style="width:12%">Nhận</th>
         </tr>`;
             
@@ -423,6 +430,7 @@
           <td style="color:red; font-size:11px;">${i.puQty}</td>
           <td style="color:#1565c0; font-size:10px;">${i.vai}</td>
           <td style="color:red; font-size:11px;">${i.vaiQty}</td>
+          <td style="font-size:9px;">${i.vaiName || ''}</td>
           <td><button class="btn-ok" onclick="handleConfirm(${i.row})">OK</button></td>
         </tr>`;
       });
@@ -461,9 +469,9 @@
          document.getElementById('resRep').innerHTML = "Không có dữ liệu.";
          return;
       }
-      let html = '<div class="table-responsive"><table class="custom-table"><tr><th>TG Quét</th><th>Đơn</th><th>PU</th><th>SL</th><th>Vải</th><th>SL</th></tr>';
+      let html = '<div class="table-responsive"><table class="custom-table"><tr><th>TG Quét</th><th>Đơn</th><th>PU</th><th>SL</th><th>Vải</th><th>SL</th><th>Tên Vải</th></tr>';
       res.rows.forEach(r => {
-        html += `<tr><td>${r[0]}</td><td style="font-size:9px">${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td></tr>`;
+        html += `<tr><td>${r[0]}</td><td style="font-size:9px">${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td><td>${r[6] || ''}</td></tr>`;
       });
       document.getElementById('resRep').innerHTML = html + '</table></div>';
     });
