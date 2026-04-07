@@ -370,6 +370,7 @@
     Swal.fire({ title: 'Đang gửi dữ liệu...', didOpen: () => Swal.showLoading() });
     
     try {
+      // Chỉ lấy ngày tháng (DD/MM/YYYY) không cần thời gian
       const now = new Date().toLocaleDateString('vi-VN');
 
       // 1. Insert into return_pending
@@ -385,7 +386,7 @@
 
       // 2. Insert into return_logs (individual items for reporting)
       const logs = curData.items.map(item => ({
-        "Thời gian": now,
+        "Ngày tháng": now,
         "Mã RPRO": item.rpro,
         "Vật liệu (U)": item.pu,
         "Số lượng PU (V)": item.puQty,
@@ -521,9 +522,9 @@
       let div = document.getElementById('resLookup');
       if(!data || data.length === 0) { div.innerHTML = "❌ Không tìm thấy mã này"; return; }
       
-      let html = '<div class="table-responsive"><table class="custom-table"><tr><th>Thời gian</th><th>Mã RPRO</th><th>Trạng thái</th></tr>';
+      let html = '<div class="table-responsive"><table class="custom-table"><tr><th>Ngày tháng</th><th>Mã RPRO</th><th>Trạng thái</th></tr>';
       data.forEach(r => { 
-        html += `<tr><td style="font-size:9px">${r["Thời gian"]}</td><td style="font-size:10px">${r["Mã RPRO"]}</td><td>${r["Chờ kho nhận"]}</td></tr>`; 
+        html += `<tr><td style="font-size:9px">${r["Ngày tháng"]}</td><td style="font-size:10px">${r["Mã RPRO"]}</td><td>${r["Chờ kho nhận"]}</td></tr>`; 
       });
       div.innerHTML = html + '</table></div>';
     } catch (err) {
@@ -553,7 +554,8 @@
       let html = '<div class="table-responsive"><table class="custom-table"><tr><th>Ngày tạo (Giờ)</th><th>Ngày/Tháng/Năm</th><th>Đơn</th><th>PU</th><th>SL</th><th>Vải</th><th>SL</th></tr>';
       data.forEach(r => {
         const fullTime = new Date(r.created_at).toLocaleString('vi-VN');
-        html += `<tr><td style="font-size:9px">${fullTime}</td><td style="font-size:9px">${r["Thời gian"]}</td><td style="font-size:10px">${r["Mã RPRO"]}</td><td>${r["Vật liệu (U)"]}</td><td>${r["Số lượng PU (V)"]}</td><td>${r["Vải (W)"]}</td><td>${r["Số lượng Vải (X)"]}</td></tr>`;
+        const displayDate = r["Ngày tháng"] || r["Thời gian"] || ''; 
+        html += `<tr><td style="font-size:9px">${fullTime}</td><td style="font-size:9px">${displayDate}</td><td style="font-size:10px">${r["Mã RPRO"]}</td><td>${r["Vật liệu (U)"]}</td><td>${r["Số lượng PU (V)"]}</td><td>${r["Vải (W)"]}</td><td>${r["Số lượng Vải (X)"]}</td></tr>`;
       });
       document.getElementById('resRep').innerHTML = html + '</table></div>';
 
@@ -589,7 +591,7 @@
       // Prepare data for Excel (Using Date objects for true date cells)
       const excelRows = data.map(r => ({
         "Ngày tạo (Có giờ)": new Date(r.created_at),
-        "Thời gian": parseDMY(r["Thời gian"]),
+        "Ngày tháng": parseDMY(r["Ngày tháng"] || r["Thời gian"]),
         "Mã RPRO": r["Mã RPRO"],
         "Vật liệu": r["Vật liệu (U)"],
         "Số lượng PU": r["Số lượng PU (V)"],
@@ -605,7 +607,7 @@
       // Apply dd/mm/yyyy formatting to date columns
       const range = XLSX.utils.decode_range(ws['!ref']);
       for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-        // Col A, B, I
+        // Col A (Ngày tạo), B (Ngày tháng), I (Ngày kho nhận)
         const cellA = ws[XLSX.utils.encode_cell({r:R, c:0})];
         if (cellA) cellA.z = 'dd/mm/yyyy hh:mm:ss';
         
