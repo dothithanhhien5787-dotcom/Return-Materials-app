@@ -237,25 +237,15 @@
   <div id="resRep" style="margin-top:15px"></div>
 </div>
     
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
   var curData = null; 
   var html5QrCode = null;
-  const GAS_URL = "/api/gas";
-    
-  async function callGAS(action, params = {}) {
-    try {
-      const response = await fetch(GAS_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, ...params })
-      });
-      return await response.json();
-    } catch (err) {
-      console.error("Lỗi kết nối GAS:", err);
-      Swal.fire("Lỗi", "Không thể kết nối với máy chủ. Vui lòng thử lại sau.", "error");
-      return null;
-    }
-  }
+  
+  // INITIALIZE SUPABASE
+  const SB_URL = 'https://vrhuzisclglurlmbluzg.supabase.co';
+  const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZyaHV6aXNjbGdsdXJsbWJsdXpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDM3NTUsImV4cCI6MjA5MTExOTc1NX0.DP3iscBkcDumiwhOs9mlS3nKGV-jIRXFGJ6NRT7wAic';
+  const _supabase = supabase.createClient(SB_URL, SB_KEY);
     
   function openTab(id) {
     document.querySelectorAll('.tab, .content').forEach(e => e.classList.remove('active'));
@@ -298,30 +288,42 @@
       .catch(() => { Swal.fire('Thất bại', 'Không tìm thấy mã trong ảnh!', 'warning'); });
   }
     
-  // --- XỬ LÝ SẢN XUẤT ---
-  function handleSearch() {
+  // --- XỬ LÝ SẢN XUẤT (SUPABASE) ---
+  async function handleSearch() {
     let v = document.getElementById('barcode').value.trim();
     if(!v) return;
     Swal.fire({ title: 'Đang tìm dữ liệu...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     
-    callGAS("getOrder", { rpro: v }).then(d => {
+    try {
+      const { data, error } = await _supabase
+        .from('return_nvl')
+        .select('*')
+        .ilike('RPRO 365', `%${v}%`);
+
       Swal.close();
-      if(!d || d === "NOT_FOUND") {
+      if (error) throw error;
+      if (!data || data.length === 0) {
         Swal.fire("Lỗi", "Không tìm thấy dữ liệu đơn hàng!", "error");
         clearUI();
         return;
       }
+
+      // Format data to match old structure
+      curData = {
+        rpro: v,
+        dateAA: new Date().toLocaleDateString('vi-VN'),
+        items: data.map(row => ({
+          rpro: row['RPRO 365'],
+          pu: row['Material Pu 365'],
+          puQty: row['Dosage Pu'],
+          vai: row['Cloth 365'],
+          vaiQty: row['Dosage Fabric'],
+          cloth: row['Cloth']
+        }))
+      };
+
+      document.getElementById('dateLoad').innerText = curData.dateAA;
       
-      if(typeof d === 'string' && d.startsWith("LỖI:")) {
-        Swal.fire("Thông báo", d.replace("LỖI: ", ""), "warning");
-        clearUI();
-        return;
-      }
-    
-      curData = d;
-      document.getElementById('dateLoad').innerText = d.dateAA || '--/--';
-      
-      // Hiển thị thông tin đơn hàng
       let s1Html = `
         <div class="order-box">
           <div style="font-weight:bold; color:var(--primary); margin-bottom:5px;">THÔNG TIN ĐƠN HÀNG</div>
@@ -330,60 +332,79 @@
       `;
       document.getElementById('s1').innerHTML = s1Html;
     
-      // Hiển thị bảng vật tư (nếu có)
-      if(d.items && d.items.length > 0) {
-        let matHtml = `
-          <div class="table-responsive">
-            <table class="custom-table">
-              <tr>
-                <th style="width:20%">Vật Tư</th>
-                <th>Mã PU</th>
-                <th>SL PU</th>
-                <th>Mã Vải</th>
-                <th>SL Vải</th>
-                <th>Tên Vải</th>
-              </tr>`;
+      let matHtml = `
+        <div class="table-responsive">
+          <table class="custom-table">
+            <tr>
+              <th style="width:20%">Vật Tư</th>
+              <th>Mã PU</th>
+              <th>SL PU</th>
+              <th>Mã Vải</th>
+              <th>SL Vải</th>
+              <th>Tên Vải</th>
+            </tr>`;
               
-        d.items.forEach(item => {
-          matHtml += `<tr>
-            <td style="font-size:9px; text-align:left;">${item.rpro.replace(/ \| /g, '<br>')}</td>
-            <td style="color:#2e7d32;">${item.pu}</td>
-            <td style="color:red;">${item.puQty}</td>
-            <td style="color:#1565c0;">${item.vai}</td>
-            <td style="color:red;">${item.vaiQty}</td>
-            <td style="font-size:9px;">${item.cloth || ''}</td>
-          </tr>`;
-        });
-        matHtml += "</table></div>";
-        document.getElementById('matTableContainer').innerHTML = matHtml;
-      } else {
-        document.getElementById('matTableContainer').innerHTML = "<p style='text-align:center; font-size:12px; color:#666;'>Không có chi tiết vật tư</p>";
-      }
-      
+      curData.items.forEach(item => {
+        matHtml += `<tr>
+          <td style="font-size:9px; text-align:left;">${item.rpro.replace(/ \| /g, '<br>')}</td>
+          <td style="color:#2e7d32;">${item.pu}</td>
+          <td style="color:red;">${item.puQty}</td>
+          <td style="color:#1565c0;">${item.vai}</td>
+          <td style="color:red;">${item.vaiQty}</td>
+          <td style="font-size:9px;">${item.cloth || ''}</td>
+        </tr>`;
+      });
+      matHtml += "</table></div>";
+      document.getElementById('matTableContainer').innerHTML = matHtml;
       document.getElementById('resSX').style.display = 'block';
-    });
+
+    } catch (err) {
+      console.error(err);
+      Swal.fire("Lỗi", "Có lỗi xảy ra khi truy vấn Supabase", "error");
+    }
   }
     
-  function handleSave() {
+  async function handleSave() {
     if(!curData) return;
-    console.log("Đang gửi dữ liệu đi:", curData);
     Swal.fire({ title: 'Đang gửi dữ liệu...', didOpen: () => Swal.showLoading() });
     
-    // Khớp với GAS: action "submit" và tham số "payload"
-    callGAS("submit", { payload: curData }).then(res => {
-      console.log("Phản hồi từ máy chủ:", res);
-      Swal.close();
+    try {
+      // 1. Insert into return_pending
+      const { error: pError } = await _supabase
+        .from('return_pending')
+        .insert([{
+          rpro: curData.rpro,
+          items: curData.items,
+          date_aa: curData.dateAA
+        }]);
       
-      if(res === "Thành công!") {
-        Swal.fire({icon: 'success', title: 'Đã gửi kho thành công!', timer: 1500, showConfirmButton: false});
-        clearUI();
-      } else {
-        Swal.fire("Lỗi", typeof res === 'string' ? res : "Có lỗi xảy ra khi lưu dữ liệu", "error");
-      }
-    }).catch(err => {
-      console.error("Lỗi khi gọi submit:", err);
-      Swal.fire("Lỗi hệ thống", "Không thể gửi dữ liệu. Kiểm tra Console.", "error");
-    });
+      if (pError) throw pError;
+
+      // 2. Insert into return_logs (individual items for reporting)
+      const logs = curData.items.map(item => ({
+        rpro: item.rpro,
+        pu: item.pu,
+        pu_qty: item.puQty,
+        vai: item.vai,
+        vai_qty: item.vaiQty,
+        cloth: item.cloth,
+        status: 'Chờ nhận'
+      }));
+
+      const { error: lError } = await _supabase
+        .from('return_logs')
+        .insert(logs);
+
+      if (lError) throw lError;
+
+      Swal.close();
+      Swal.fire({icon: 'success', title: 'Đã gửi kho thành công!', timer: 1500, showConfirmButton: false});
+      clearUI();
+
+    } catch (err) {
+      console.error(err);
+      Swal.fire("Lỗi", "Không thể gửi dữ liệu lên Supabase", "error");
+    }
   }
     
   function handleCancel() {
@@ -398,14 +419,20 @@
     document.getElementById('resSX').style.display = 'none';
   }
     
-  // --- XỬ LÝ THỦ KHO (ĐÃ CẬP NHẬT TÁCH CỘT) ---
-  function loadPending() {
+  // --- THỦ KHO (SUPABASE) ---
+  async function loadPending() {
     let div = document.getElementById('listPending');
     div.innerHTML = "<div style='text-align:center; padding:30px;'>🔄 Đang tải danh sách chờ...</div>";
     
-    callGAS("getPendingOrders").then(list => {
-      if (!list || list.length === 0) { 
-        div.innerHTML = "<div style='text-align:center; padding:40px; color:#2e7d32; font-weight:bold;'>✅ Hiện tại không có đơn nào chờ nhận</div>";
+    try {
+      const { data, error } = await _supabase
+        .from('return_pending')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      if (!data || data.length === 0) { 
+        div.innerHTML = "<div style='text-align:center; padding:40px; color:#28a745; font-weight:bold;'>✅ Hiện tại không có đơn nào chờ nhận</div>";
         return; 
       }
       
@@ -420,72 +447,119 @@
           <th style="width:12%">Nhận</th>
         </tr>`;
             
-      list.forEach(i => {
-        html += `<tr>
-          <td style="text-align:left; font-size:10px; background:#fffde7;">
-            <b>${i.rpro.replace(/ \| /g, '<br>')}</b><br>
-            <span style="color:var(--danger); font-size:9px;">📅 ${i.date}</span> <span style="color:#666; font-size:9px;">⏰ ${i.time}</span>
-          </td>
-          <td style="color:#2e7d32; font-size:10px;">${i.pu}</td>
-          <td style="color:red; font-size:11px;">${i.puQty}</td>
-          <td style="color:#1565c0; font-size:10px;">${i.vai}</td>
-          <td style="color:red; font-size:11px;">${i.vaiQty}</td>
-          <td style="font-size:9px;">${i.cloth || ''}</td>
-          <td><button class="btn-ok" onclick="handleConfirm(${i.row})">OK</button></td>
-        </tr>`;
+      data.forEach(row => {
+        const items = row.items || [];
+        const dateStr = new Date(row.created_at).toLocaleDateString('vi-VN');
+        const timeStr = new Date(row.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+
+        items.forEach((i, idx) => {
+          html += `<tr>
+            <td style="text-align:left; font-size:10px; background:#fffde7;">
+              ${idx === 0 ? `<b>${row.rpro}</b><br><span style="color:var(--danger); font-size:9px;">📅 ${dateStr}</span> <span style="color:#666; font-size:9px;">⏰ ${timeStr}</span>` : ''}
+            </td>
+            <td style="color:#2e7d32; font-size:10px;">${i.pu}</td>
+            <td style="color:red; font-size:11px;">${i.puQty}</td>
+            <td style="color:#1565c0; font-size:10px;">${i.vai}</td>
+            <td style="color:red; font-size:11px;">${i.vaiQty}</td>
+            <td style="font-size:9px;">${i.cloth || ''}</td>
+            <td>${idx === 0 ? `<button class="btn-ok" onclick="handleConfirm(${row.id}, '${row.rpro}')">OK</button>` : ''}</td>
+          </tr>`;
+        });
       });
       div.innerHTML = html + '</table></div>';
-    });
+
+    } catch (err) {
+      console.error(err);
+      div.innerHTML = "<div style='text-align:center; color:red; padding:20px;'>Lỗi khi tải dữ liệu.</div>";
+    }
   }
     
-  function handleConfirm(row) {
+  async function handleConfirm(id, rpro) {
     Swal.fire({ title: 'Đang xác nhận...', didOpen: () => Swal.showLoading() });
-    callGAS("confirmOrder", { row: row }).then(() => {
+    try {
+      // 1. Delete from return_pending
+      const { error: dError } = await _supabase.from('return_pending').delete().eq('id', id);
+      if (dError) throw dError;
+
+      // 2. Update status in return_logs
+      const { error: uError } = await _supabase
+        .from('return_logs')
+        .update({ status: 'Đã nhận' })
+        .eq('rpro', rpro)
+        .eq('status', 'Chờ nhận');
+      
+      if (uError) throw uError;
+
       Swal.fire({icon: 'success', title: 'Đã nhập kho!', timer: 1000, showConfirmButton: false});
       loadPending();
-    });
+    } catch (err) {
+      console.error(err);
+      Swal.fire("Lỗi", "Không thể xác nhận đơn hàng.", "error");
+    }
   }
     
-  // --- TRA CỨU & BÁO CÁO ---
-  function handleLookup() {
+  // --- TRA CỨU & BÁO CÁO (SUPABASE) ---
+  async function handleLookup() {
     let val = document.getElementById('lookupInp').value;
     if(!val) return;
     document.getElementById('resLookup').innerHTML = "Đang tìm...";
-    callGAS("lookupRPRO", { rpro: val }).then(res => {
+    
+    try {
+      const { data, error } = await _supabase
+        .from('return_logs')
+        .select('*')
+        .ilike('rpro', `%${val}%`)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
       let div = document.getElementById('resLookup');
-      if(!res || res === "NOT_FOUND") { div.innerHTML = "❌ Không tìm thấy mã này"; return; }
+      if(!data || data.length === 0) { div.innerHTML = "❌ Không tìm thấy mã này"; return; }
+      
       let html = '<div class="table-responsive"><table class="custom-table"><tr><th>Ngày</th><th>Đơn hàng</th><th>TT</th></tr>';
-      res.forEach(r => { html += `<tr><td>${r.date}</td><td style="font-size:10px">${r.rpro}</td><td>${r.status}</td></tr>`; });
+      data.forEach(r => { 
+        const d = new Date(r.created_at).toLocaleDateString('vi-VN');
+        html += `<tr><td>${d}</td><td style="font-size:10px">${r.rpro}</td><td>${r.status}</td></tr>`; 
+      });
       div.innerHTML = html + '</table></div>';
-    });
+    } catch (err) {
+      console.error(err);
+    }
   }
     
-  function viewRep() {
+  async function viewRep() {
     let f = document.getElementById('fDate').value, t = document.getElementById('tDate').value;
     if(!f || !t) return Swal.fire('Lỗi', 'Vui lòng chọn đủ ngày', 'warning');
     document.getElementById('resRep').innerHTML = "Đang lấy dữ liệu...";
-    callGAS("getReportData", { fromDate: f, toDate: t }).then(res => {
-      if(!res || !res.rows) {
+    
+    try {
+      // Adjusted to include the full day of t
+      const { data, error } = await _supabase
+        .from('return_logs')
+        .select('*')
+        .gte('created_at', f)
+        .lte('created_at', t + 'T23:59:59')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      if(!data || data.length === 0) {
          document.getElementById('resRep').innerHTML = "Không có dữ liệu.";
          return;
       }
+
       let html = '<div class="table-responsive"><table class="custom-table"><tr><th>TG Quét</th><th>Đơn</th><th>PU</th><th>SL</th><th>Vải</th><th>SL</th><th>Tên Vải</th></tr>';
-      res.rows.forEach(r => {
-        html += `<tr><td>${r[0]}</td><td style="font-size:9px">${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td><td>${r[7] || ''}</td></tr>`;
+      data.forEach(r => {
+        const ts = new Date(r.created_at).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        html += `<tr><td>${ts}</td><td style="font-size:9px">${r.rpro}</td><td>${r.pu}</td><td>${r.pu_qty}</td><td>${r.vai}</td><td>${r.vai_qty}</td><td>${r.cloth || ''}</td></tr>`;
       });
       document.getElementById('resRep').innerHTML = html + '</table></div>';
-    });
+
+    } catch (err) {
+      console.error(err);
+    }
   }
     
   function downEx() {
-    let f = document.getElementById('fDate').value, t = document.getElementById('tDate').value;
-    if(!f || !t) return Swal.fire('Lỗi', 'Vui lòng chọn ngày để xuất file', 'warning');
-    Swal.fire({title: 'Đang tạo file...', didOpen: () => Swal.showLoading()});
-    callGAS("exportReportToExcel", { fromDate: f, toDate: t }).then(url => { 
-      Swal.close();
-      if(!url || url === "Trống") return Swal.fire('Thông báo', 'Không có dữ liệu trong khoảng ngày này', 'info');
-      window.open(url, '_blank'); 
-    });
+    Swal.fire('Thông báo', 'Tính năng xuất Excel đang được nâng cấp cho Supabase.', 'info');
   }
 </script>
 </body>
