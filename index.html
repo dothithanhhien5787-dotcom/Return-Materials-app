@@ -351,7 +351,7 @@
             <td style="color:red;">${item.puQty}</td>
             <td style="color:#1565c0;">${item.vai}</td>
             <td style="color:red;">${item.vaiQty}</td>
-            <td style="font-size:9px;">${item.vaiName || ''}</td>
+            <td style="font-size:9px;">${item.cloth || ''}</td>
           </tr>`;
         });
         matHtml += "</table></div>";
@@ -430,7 +430,7 @@
           <td style="color:red; font-size:11px;">${i.puQty}</td>
           <td style="color:#1565c0; font-size:10px;">${i.vai}</td>
           <td style="color:red; font-size:11px;">${i.vaiQty}</td>
-          <td style="font-size:9px;">${i.vaiName || ''}</td>
+          <td style="font-size:9px;">${i.cloth || ''}</td>
           <td><button class="btn-ok" onclick="handleConfirm(${i.row})">OK</button></td>
         </tr>`;
       });
@@ -471,7 +471,7 @@
       }
       let html = '<div class="table-responsive"><table class="custom-table"><tr><th>TG Quét</th><th>Đơn</th><th>PU</th><th>SL</th><th>Vải</th><th>SL</th><th>Tên Vải</th></tr>';
       res.rows.forEach(r => {
-        html += `<tr><td>${r[0]}</td><td style="font-size:9px">${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td><td>${r[6] || ''}</td></tr>`;
+        html += `<tr><td>${r[0]}</td><td style="font-size:9px">${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td><td>${r[7] || ''}</td></tr>`;
       });
       document.getElementById('resRep').innerHTML = html + '</table></div>';
     });
