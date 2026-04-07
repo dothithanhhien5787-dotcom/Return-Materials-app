@@ -369,6 +369,8 @@
     Swal.fire({ title: 'Đang gửi dữ liệu...', didOpen: () => Swal.showLoading() });
     
     try {
+      const now = new Date().toLocaleString('vi-VN');
+
       // 1. Insert into return_pending
       const { error: pError } = await _supabase
         .from('return_pending')
@@ -382,13 +384,13 @@
 
       // 2. Insert into return_logs (individual items for reporting)
       const logs = curData.items.map(item => ({
-        rpro: item.rpro,
-        pu: item.pu,
-        pu_qty: item.puQty,
-        vai: item.vai,
-        vai_qty: item.vaiQty,
-        cloth: item.cloth,
-        status: 'Chờ nhận'
+        "Thời gian": now,
+        "Mã RPRO": item.rpro,
+        "Vật liệu (U)": item.pu,
+        "Số lượng PU (V)": item.puQty,
+        "Vải (W)": item.vai,
+        "Số lượng Vải (X)": item.vaiQty,
+        "Chờ kho nhận": 'Chờ nhận'
       }));
 
       const { error: lError } = await _supabase
@@ -443,7 +445,6 @@
           <th>SL PU</th>
           <th>Mã Vải</th>
           <th>SL Vải</th>
-          <th>Tên Vải</th>
           <th style="width:12%">Nhận</th>
         </tr>`;
             
@@ -461,7 +462,6 @@
             <td style="color:red; font-size:11px;">${i.puQty}</td>
             <td style="color:#1565c0; font-size:10px;">${i.vai}</td>
             <td style="color:red; font-size:11px;">${i.vaiQty}</td>
-            <td style="font-size:9px;">${i.cloth || ''}</td>
             <td>${idx === 0 ? `<button class="btn-ok" onclick="handleConfirm(${row.id}, '${row.rpro}')">OK</button>` : ''}</td>
           </tr>`;
         });
@@ -477,6 +477,8 @@
   async function handleConfirm(id, rpro) {
     Swal.fire({ title: 'Đang xác nhận...', didOpen: () => Swal.showLoading() });
     try {
+      const now = new Date().toLocaleString('vi-VN');
+
       // 1. Delete from return_pending
       const { error: dError } = await _supabase.from('return_pending').delete().eq('id', id);
       if (dError) throw dError;
@@ -484,9 +486,12 @@
       // 2. Update status in return_logs
       const { error: uError } = await _supabase
         .from('return_logs')
-        .update({ status: 'Đã nhận' })
-        .eq('rpro', rpro)
-        .eq('status', 'Chờ nhận');
+        .update({ 
+          "Chờ kho nhận": 'Đã nhận',
+          "Thời gian kho nhận": now
+        })
+        .eq('Mã RPRO', rpro)
+        .eq('Chờ kho nhận', 'Chờ nhận');
       
       if (uError) throw uError;
 
@@ -500,7 +505,7 @@
     
   // --- TRA CỨU & BÁO CÁO (SUPABASE) ---
   async function handleLookup() {
-    let val = document.getElementById('lookupInp').value;
+    let val = document.getElementById('lookupInp').value.trim();
     if(!val) return;
     document.getElementById('resLookup').innerHTML = "Đang tìm...";
     
@@ -508,17 +513,16 @@
       const { data, error } = await _supabase
         .from('return_logs')
         .select('*')
-        .ilike('rpro', `%${val}%`)
+        .ilike('Mã RPRO', `%${val}%`)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       let div = document.getElementById('resLookup');
       if(!data || data.length === 0) { div.innerHTML = "❌ Không tìm thấy mã này"; return; }
       
-      let html = '<div class="table-responsive"><table class="custom-table"><tr><th>Ngày</th><th>Đơn hàng</th><th>TT</th></tr>';
+      let html = '<div class="table-responsive"><table class="custom-table"><tr><th>Thời gian</th><th>Mã RPRO</th><th>Trạng thái</th></tr>';
       data.forEach(r => { 
-        const d = new Date(r.created_at).toLocaleDateString('vi-VN');
-        html += `<tr><td>${d}</td><td style="font-size:10px">${r.rpro}</td><td>${r.status}</td></tr>`; 
+        html += `<tr><td style="font-size:9px">${r["Thời gian"]}</td><td style="font-size:10px">${r["Mã RPRO"]}</td><td>${r["Chờ kho nhận"]}</td></tr>`; 
       });
       div.innerHTML = html + '</table></div>';
     } catch (err) {
@@ -532,7 +536,6 @@
     document.getElementById('resRep').innerHTML = "Đang lấy dữ liệu...";
     
     try {
-      // Adjusted to include the full day of t
       const { data, error } = await _supabase
         .from('return_logs')
         .select('*')
@@ -546,10 +549,9 @@
          return;
       }
 
-      let html = '<div class="table-responsive"><table class="custom-table"><tr><th>TG Quét</th><th>Đơn</th><th>PU</th><th>SL</th><th>Vải</th><th>SL</th><th>Tên Vải</th></tr>';
+      let html = '<div class="table-responsive"><table class="custom-table"><tr><th>Thời gian</th><th>Đơn</th><th>PU</th><th>SL</th><th>Vải</th><th>SL</th></tr>';
       data.forEach(r => {
-        const ts = new Date(r.created_at).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-        html += `<tr><td>${ts}</td><td style="font-size:9px">${r.rpro}</td><td>${r.pu}</td><td>${r.pu_qty}</td><td>${r.vai}</td><td>${r.vai_qty}</td><td>${r.cloth || ''}</td></tr>`;
+        html += `<tr><td style="font-size:9px">${r["Thời gian"]}</td><td style="font-size:10px">${r["Mã RPRO"]}</td><td>${r["Vật liệu (U)"]}</td><td>${r["Số lượng PU (V)"]}</td><td>${r["Vải (W)"]}</td><td>${r["Số lượng Vải (X)"]}</td></tr>`;
       });
       document.getElementById('resRep').innerHTML = html + '</table></div>';
 
