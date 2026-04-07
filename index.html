@@ -370,8 +370,8 @@
     Swal.fire({ title: 'Đang gửi dữ liệu...', didOpen: () => Swal.showLoading() });
     
     try {
-      // Chuẩn hóa thời gian sang ISO: YYYY-MM-DD HH:mm:ss
-      const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+      // Chỉ lấy ngày tháng (DD/MM/YYYY) không cần thời gian
+      const now = new Date().toLocaleDateString('vi-VN');
 
       // 1. Insert into return_pending
       const { error: pError } = await _supabase
@@ -479,8 +479,7 @@
   async function handleConfirm(id, rpro) {
     Swal.fire({ title: 'Đang xác nhận...', didOpen: () => Swal.showLoading() });
     try {
-      // Chuẩn hóa thời gian sang ISO: YYYY-MM-DD HH:mm:ss
-      const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+      const now = new Date().toLocaleDateString('vi-VN');
 
       // 1. Delete from return_pending
       const { error: dError } = await _supabase.from('return_pending').delete().eq('id', id);
