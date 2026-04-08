@@ -306,15 +306,16 @@
     Swal.fire({ title: 'Đang tìm dữ liệu...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     
     try {
+      // Tìm kiếm trong cả 2 cột RPRO 365 và POV with batches
       const { data, error } = await _supabase
         .from('return_nvl')
         .select('*')
-        .ilike('RPRO 365', `%${v}%`);
+        .or(`"RPRO 365".ilike.%${v}%,"POV with batches".ilike.%${v}%`);
 
       Swal.close();
       if (error) throw error;
       if (!data || data.length === 0) {
-        Swal.fire("Lỗi", "Không tìm thấy dữ liệu đơn hàng!", "error");
+        Swal.fire("Không tìm thấy", `Mã "${v}" không có trong dữ liệu.`, "warning");
         return;
       }
 
