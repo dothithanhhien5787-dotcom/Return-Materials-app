@@ -401,6 +401,7 @@
       <div class="table-responsive">
         <table class="custom-table">
           <tr>
+            <th style="width:20%">Đơn hàng</th>
             <th style="background:#e8f5e9">Mã PU</th>
             <th style="background:#fbe9e7">Tổng SL PU</th>
             <th style="background:#e3f2fd">Mã Vải</th>
@@ -410,6 +411,7 @@
             
     curData.items.forEach(item => {
       matHtml += `<tr>
+        <td style="font-size:9px; text-align:left; background:#fffde7;">${item.rpro.replace(/ \| /g, '<br>')}</td>
         <td style="color:#2e7d32; font-weight:bold;">${item.pu}</td>
         <td style="color:red; font-weight:bold; font-size:13px;">${item.puQty}</td>
         <td style="color:#1565c0; font-weight:bold;">${item.vai}</td>
