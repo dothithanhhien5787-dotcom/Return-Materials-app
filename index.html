@@ -241,6 +241,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
   var curData = null; 
+  var allScannedItems = []; // Lưu trữ tất cả vật tư từ các đơn đã quét
+  var scannedRpros = new Set(); // Lưu danh sách các mã Rpro unique đã quét
   var html5QrCode = null;
   
   // INITIALIZE SUPABASE
@@ -293,6 +295,14 @@
   async function handleSearch() {
     let v = document.getElementById('barcode').value.trim();
     if(!v) return;
+    
+    // Nếu mã này đã được quét trong đợt này rồi
+    if (scannedRpros.has(v)) {
+       Swal.fire("Thông báo", "Mã đơn hàng này đã có trong danh sách quét", "info");
+       document.getElementById('barcode').value = '';
+       return;
+    }
+
     Swal.fire({ title: 'Đang tìm dữ liệu...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     
     try {
@@ -305,64 +315,111 @@
       if (error) throw error;
       if (!data || data.length === 0) {
         Swal.fire("Lỗi", "Không tìm thấy dữ liệu đơn hàng!", "error");
-        clearUI();
         return;
       }
 
-      // Format data to match old structure
-      curData = {
-        rpro: v,
-        dateAA: new Date().toLocaleDateString('vi-VN'),
-        items: data.map(row => ({
+      // Ghi nhận mã Rpro này
+      scannedRpros.add(v);
+
+      // Thêm các item của đơn này vào mảng tổng
+      data.forEach(row => {
+        allScannedItems.push({
           rpro: row['RPRO 365'],
           pu: row['Material Pu 365'],
-          puQty: row['Dosage Pu'],
+          puQty: parseFloat(row['Dosage Pu']) || 0,
           vai: row['Cloth 365'],
-          vaiQty: row['Dosage Fabric'],
+          vaiQty: parseFloat(row['Dosage Fabric']) || 0,
           cloth: row['Cloth']
-        }))
-      };
-
-      document.getElementById('dateLoad').innerText = curData.dateAA;
-      
-      let s1Html = `
-        <div class="order-box">
-          <div style="font-weight:bold; color:var(--primary); margin-bottom:5px;">THÔNG TIN ĐƠN HÀNG</div>
-          <div style="font-size:12px; color:#555;">Mã Rpro: <span class="tag-rpro">${v}</span></div>
-        </div>
-      `;
-      document.getElementById('s1').innerHTML = s1Html;
-    
-      let matHtml = `
-        <div class="table-responsive">
-          <table class="custom-table">
-            <tr>
-              <th style="width:20%">Vật Tư</th>
-              <th>Mã PU</th>
-              <th>SL PU</th>
-              <th>Mã Vải</th>
-              <th>SL Vải</th>
-              <th>Tên Vải</th>
-            </tr>`;
-              
-      curData.items.forEach(item => {
-        matHtml += `<tr>
-          <td style="font-size:9px; text-align:left;">${item.rpro.replace(/ \| /g, '<br>')}</td>
-          <td style="color:#2e7d32;">${item.pu}</td>
-          <td style="color:red;">${item.puQty}</td>
-          <td style="color:#1565c0;">${item.vai}</td>
-          <td style="color:red;">${item.vaiQty}</td>
-          <td style="font-size:9px;">${item.cloth || ''}</td>
-        </tr>`;
+        });
       });
-      matHtml += "</table></div>";
-      document.getElementById('matTableContainer').innerHTML = matHtml;
-      document.getElementById('resSX').style.display = 'block';
+
+      renderProductionSummary();
+      document.getElementById('barcode').value = '';
 
     } catch (err) {
       console.error(err);
-      Swal.fire("Lỗi", "Có lỗi xảy ra khi truy vấn Supabase", "error");
+      Swal.fire("Lỗi", "Có lỗi xảy ra khi truy vấn dữ liệu", "error");
     }
+  }
+
+  function renderProductionSummary() {
+    if (allScannedItems.length === 0) {
+      document.getElementById('resSX').style.display = 'none';
+      return;
+    }
+
+    // --- LOGIC CỘNG GỘP VẬT TƯ ---
+    const groups = {};
+    allScannedItems.forEach(item => {
+      // Nhóm theo cặp (Mã PU + Mã Vải)
+      const key = `${item.pu}_${item.vai}`;
+      if (!groups[key]) {
+        groups[key] = {
+          pu: item.pu,
+          puQty: 0,
+          vai: item.vai,
+          vaiQty: 0,
+          cloth: item.cloth,
+          rpros: new Set()
+        };
+      }
+      groups[key].puQty += item.puQty;
+      groups[key].vaiQty += item.vaiQty;
+      groups[key].rpros.add(item.rpro);
+    });
+
+    // Chuẩn bị dữ liệu để gửi kho (curData)
+    curData = {
+      rpro: Array.from(scannedRpros).join(' | '),
+      dateAA: new Date().toLocaleDateString('vi-VN'),
+      items: Object.values(groups).map(g => ({
+        rpro: Array.from(g.rpros).join(' | '),
+        pu: g.pu,
+        puQty: g.puQty.toFixed(2),
+        vai: g.vai,
+        vaiQty: g.vaiQty.toFixed(2),
+        cloth: g.cloth
+      }))
+    };
+
+    document.getElementById('dateLoad').innerText = curData.dateAA;
+    
+    // Hiển thị danh sách Đơn hàng phía trên
+    let s1Html = `
+      <div class="order-box">
+        <div style="font-weight:bold; color:var(--primary); margin-bottom:5px;">DANH SÁCH ĐƠN HÀNG ĐÃ QUÉT (${scannedRpros.size})</div>
+        <div style="display:flex; flex-wrap:wrap; gap:5px; margin-bottom:10px;">
+          ${Array.from(scannedRpros).map(r => `<span class="tag-rpro">${r}</span>`).join('')}
+        </div>
+        <button class="btn" style="background:#666; width:auto; padding:3px 12px; font-size:10px; height:auto; margin-bottom:5px;" onclick="clearUI()">QUÉT LẠI TỪ ĐẦU</button>
+      </div>
+    `;
+    document.getElementById('s1').innerHTML = s1Html;
+  
+    // Hiển thị bảng Vật tư đã CỘNG GỘP
+    let matHtml = `
+      <div class="table-responsive">
+        <table class="custom-table">
+          <tr>
+            <th style="background:#e8f5e9">Mã PU</th>
+            <th style="background:#fbe9e7">Tổng SL PU</th>
+            <th style="background:#e3f2fd">Mã Vải</th>
+            <th style="background:#fbe9e7">Tổng SL Vải</th>
+            <th>Tên Vải</th>
+          </tr>`;
+            
+    curData.items.forEach(item => {
+      matHtml += `<tr>
+        <td style="color:#2e7d32; font-weight:bold;">${item.pu}</td>
+        <td style="color:red; font-weight:bold; font-size:13px;">${item.puQty}</td>
+        <td style="color:#1565c0; font-weight:bold;">${item.vai}</td>
+        <td style="color:red; font-weight:bold; font-size:13px;">${item.vaiQty}</td>
+        <td style="font-size:9px;">${item.cloth || ''}</td>
+      </tr>`;
+    });
+    matHtml += "</table></div>";
+    document.getElementById('matTableContainer').innerHTML = matHtml;
+    document.getElementById('resSX').style.display = 'block';
   }
     
   async function handleSave() {
@@ -418,6 +475,8 @@
     
   function clearUI() {
     curData = null;
+    allScannedItems = [];
+    scannedRpros.clear();
     document.getElementById('barcode').value = '';
     document.getElementById('dateLoad').innerText = '--/--';
     document.getElementById('resSX').style.display = 'none';
