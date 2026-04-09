@@ -509,13 +509,18 @@
           <th>SL PU</th>
           <th>Mã Vải</th>
           <th>SL Vải</th>
-          <th style="width:12%">Nhận</th>
+          <th style="width:10%">Nhận PU</th>
+          <th style="width:10%">Nhận Vải</th>
         </tr>`;
             
       data.forEach(row => {
         const items = row.items || [];
         const dateStr = new Date(row.created_at).toLocaleDateString('vi-VN');
         const timeStr = new Date(row.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+
+        // Kiểm tra trạng thái đã nhận PU/Vải của cả đơn
+        const puOk = row.puOk || false;
+        const vaiOk = row.vaiOk || false;
 
         items.forEach((i, idx) => {
           html += `<tr>
@@ -526,7 +531,8 @@
             <td style="color:red; font-size:11px;">${i.puQty}</td>
             <td style="color:#1565c0; font-size:10px;">${i.vai}</td>
             <td style="color:red; font-size:11px;">${i.vaiQty}</td>
-            <td>${idx === 0 ? `<button class="btn-ok" onclick="handleConfirm(${row.id}, '${row.rpro}')">OK</button>` : ''}</td>
+            <td>${idx === 0 ? (puOk ? `<span style="color:green; font-weight:bold; font-size:10px;">✅ ĐÃ NHẬN</span>` : `<button class="btn-ok" onclick="handleConfirm(${row.id}, '${row.rpro}', 'pu')">Nhận PU</button>`) : ''}</td>
+            <td>${idx === 0 ? (vaiOk ? `<span style="color:green; font-weight:bold; font-size:10px;">✅ ĐÃ NHẬN</span>` : `<button class="btn-ok" style="background:#1565c0" onclick="handleConfirm(${row.id}, '${row.rpro}', 'vai')">Nhận Vải</button>`) : ''}</td>
           </tr>`;
         });
       });
@@ -538,28 +544,59 @@
     }
   }
     
-  async function handleConfirm(id, rpro) {
+  async function handleConfirm(id, rpro, type) {
     Swal.fire({ title: 'Đang xác nhận...', didOpen: () => Swal.showLoading() });
     try {
       const now = new Date().toLocaleDateString('vi-VN');
+      const fullNow = new Date().toLocaleString('vi-VN');
 
-      // 1. Delete from return_pending
-      const { error: dError } = await _supabase.from('return_pending').delete().eq('id', id);
-      if (dError) throw dError;
+      // 1. Lấy dữ liệu hiện tại từ return_pending
+      const { data: curRow, error: gError } = await _supabase.from('return_pending').select('*').eq('id', id).single();
+      if (gError) throw gError;
 
-      // 2. Update status in return_logs
-      const { error: uError } = await _supabase
-        .from('return_logs')
-        .update({ 
-          "Chờ kho nhận": 'Đã nhận',
-          "Thời gian kho nhận": now
-        })
-        .eq('Mã RPRO', rpro)
-        .eq('Chờ kho nhận', 'Chờ nhận');
+      let updateObj = {};
+      if (type === 'pu') updateObj = { puOk: true };
+      else updateObj = { vaiOk: true };
+
+      // 2. Cập nhật trạng thái trong return_pending
+      const { error: pError } = await _supabase.from('return_pending').update(updateObj).eq('id', id);
+      if (pError) throw pError;
+
+      // 3. Cập nhật status trong return_logs (ghi nhận nhận loại nào)
+      // Tìm các log tương ứng với RPRO này mà chưa nhận xong
+      const { data: logs } = await _supabase.from('return_logs').select('id, "Chờ kho nhận"').eq('Mã RPRO', rpro).neq('Chờ kho nhận', 'Đã nhận');
       
-      if (uError) throw uError;
+      if (logs) {
+        for (let log of logs) {
+          let currentStatus = log["Chờ kho nhận"] || 'Chờ nhận';
+          let nextStatus = currentStatus;
+          
+          if (type === 'pu') {
+            if (currentStatus === 'Đã nhận Vải') nextStatus = 'Đã nhận';
+            else nextStatus = 'Đã nhận PU';
+          } else {
+            if (currentStatus === 'Đã nhận PU') nextStatus = 'Đã nhận';
+            else nextStatus = 'Đã nhận Vải';
+          }
 
-      Swal.fire({icon: 'success', title: 'Đã nhập kho!', timer: 1000, showConfirmButton: false});
+          await _supabase.from('return_logs').update({ 
+            "Chờ kho nhận": nextStatus,
+            "Thời gian kho nhận": now
+          }).eq('id', log.id);
+        }
+      }
+
+      // 4. Nếu CẢ HAI đều đã nhận xong thì mới xóa khỏi return_pending
+      const checkPu = (type === 'pu') ? true : (curRow.puOk || false);
+      const checkVai = (type === 'vai') ? true : (curRow.vaiOk || false);
+
+      if (checkPu && checkVai) {
+        await _supabase.from('return_pending').delete().eq('id', id);
+        Swal.fire({icon: 'success', title: 'Đã hoàn tất đơn hàng!', timer: 1500, showConfirmButton: false});
+      } else {
+        Swal.fire({icon: 'success', title: `Đã nhận xong ${type.toUpperCase()}!`, timer: 1000, showConfirmButton: false});
+      }
+      
       loadPending();
     } catch (err) {
       console.error(err);
