@@ -430,15 +430,21 @@
     Swal.fire({ title: 'Đang gửi dữ liệu...', didOpen: () => Swal.showLoading() });
     
     try {
-      // Chỉ lấy ngày tháng (DD/MM/YYYY) không cần thời gian
       const now = new Date().toLocaleDateString('vi-VN');
+
+      // Thêm trạng thái mặc định vào từng item để theo dõi xác nhận PU/Vải
+      const itemsWithStatus = curData.items.map(item => ({
+        ...item,
+        puOk: false,
+        vaiOk: false
+      }));
 
       // 1. Insert into return_pending
       const { error: pError } = await _supabase
         .from('return_pending')
         .insert([{
           rpro: curData.rpro,
-          items: curData.items,
+          items: itemsWithStatus,
           date_aa: curData.dateAA
         }]);
       
@@ -446,7 +452,7 @@
 
       // 2. Insert into return_logs (individual items for reporting)
       const logs = curData.items.map(item => ({
-        "Ngày tháng": now,
+        "Thời gian": now,
         "Mã RPRO": item.rpro,
         "Vật liệu (U)": item.pu,
         "Số lượng PU (V)": item.puQty,
@@ -518,9 +524,10 @@
         const dateStr = new Date(row.created_at).toLocaleDateString('vi-VN');
         const timeStr = new Date(row.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 
-        // Kiểm tra trạng thái đã nhận PU/Vải của cả đơn
-        const puOk = row.puOk || false;
-        const vaiOk = row.vaiOk || false;
+        // Đọc trạng thái từ item đầu tiên trong mảng items
+        const firstItem = items[0] || {};
+        const puOk = firstItem.puOk || false;
+        const vaiOk = firstItem.vaiOk || false;
 
         items.forEach((i, idx) => {
           html += `<tr>
@@ -548,22 +555,26 @@
     Swal.fire({ title: 'Đang xác nhận...', didOpen: () => Swal.showLoading() });
     try {
       const now = new Date().toLocaleDateString('vi-VN');
-      const fullNow = new Date().toLocaleString('vi-VN');
 
       // 1. Lấy dữ liệu hiện tại từ return_pending
       const { data: curRow, error: gError } = await _supabase.from('return_pending').select('*').eq('id', id).single();
       if (gError) throw gError;
 
-      let updateObj = {};
-      if (type === 'pu') updateObj = { puOk: true };
-      else updateObj = { vaiOk: true };
+      // 2. Cập nhật trạng thái TRONG mảng items
+      const newItems = curRow.items.map(it => {
+        if (type === 'pu') it.puOk = true;
+        else it.vaiOk = true;
+        return it;
+      });
 
-      // 2. Cập nhật trạng thái trong return_pending
-      const { error: pError } = await _supabase.from('return_pending').update(updateObj).eq('id', id);
-      if (pError) throw pError;
+      const { error: pUpdateError } = await _supabase
+        .from('return_pending')
+        .update({ items: newItems })
+        .eq('id', id);
+      
+      if (pUpdateError) throw pUpdateError;
 
       // 3. Cập nhật status trong return_logs (ghi nhận nhận loại nào)
-      // Tìm các log tương ứng với RPRO này mà chưa nhận xong
       const { data: logs } = await _supabase.from('return_logs').select('id, "Chờ kho nhận"').eq('Mã RPRO', rpro).neq('Chờ kho nhận', 'Đã nhận');
       
       if (logs) {
@@ -586,11 +597,9 @@
         }
       }
 
-      // 4. Nếu CẢ HAI đều đã nhận xong thì mới xóa khỏi return_pending
-      const checkPu = (type === 'pu') ? true : (curRow.puOk || false);
-      const checkVai = (type === 'vai') ? true : (curRow.vaiOk || false);
-
-      if (checkPu && checkVai) {
+      // 4. Nếu TẤT CẢ item đều đã nhận xong (kiểm tra item đầu tiên đại diện)
+      const checkItem = newItems[0];
+      if (checkItem.puOk && checkItem.vaiOk) {
         await _supabase.from('return_pending').delete().eq('id', id);
         Swal.fire({icon: 'success', title: 'Đã hoàn tất đơn hàng!', timer: 1500, showConfirmButton: false});
       } else {
