@@ -311,8 +311,7 @@
     console.log("Đang tải dữ liệu Dashboard...");
     const { data, error } = await _supabase
       .from('return_nvl')
-      .select('Customer, "PO Q\'TY", "Load material", "Load liệu", "Mold#", "Ngày tháng"')
-      .order('Ngày tháng', { ascending: false })
+      .select('*')
       .limit(3000); 
 
     if (error) {
