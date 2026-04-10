@@ -351,8 +351,8 @@
 
     let weekPlanOrders = 0;
     let weekPlanPairs = 0;
-    let custQtyWeek = {};
-    let moldQtyWeek = {};
+    let custQtyAll = {};
+    let moldQtyAll = {};
     let unloadedQtyTotal = 0;
     let lateDeliveredQtyTotal = 0;
     let uniqueMolds = new Set();
@@ -372,11 +372,13 @@
       if (planDate && planDate >= monday && planDate <= sunday) {
         weekPlanOrders++;
         weekPlanPairs += qty;
-        custQtyWeek[cust] = (custQtyWeek[cust] || 0) + qty;
-        moldQtyWeek[mold] = (moldQtyWeek[mold] || 0) + qty;
       }
 
-      // 2. Performance (Tính trên toàn bộ 4000 dòng tải về)
+      // 2. Tổng quan sản lượng (Toàn bộ 4000 dòng)
+      custQtyAll[cust] = (custQtyAll[cust] || 0) + qty;
+      moldQtyAll[mold] = (moldQtyAll[mold] || 0) + qty;
+
+      // 3. Performance
       if (!r["Load liệu"] || r["Load liệu"] === "") {
          if (planDate && planDate < today) {
             unloadedQtyTotal += qty;
@@ -384,8 +386,8 @@
          }
       } else {
          if (planDate && actualLoadDate) {
-            const pTime = planDate.setHours(0,0,0,0);
-            const aTime = actualLoadDate.setHours(0,0,0,0);
+            const pTime = new Date(planDate).setHours(0,0,0,0);
+            const aTime = new Date(actualLoadDate).setHours(0,0,0,0);
             if (aTime < pTime) {
                performance.early += qty;
             } else if (aTime === pTime) {
@@ -404,16 +406,16 @@
     document.getElementById('db-late-delivered-qty').innerText = Math.round(lateDeliveredQtyTotal).toLocaleString();
     document.getElementById('db-total-molds').innerText = uniqueMolds.size.toLocaleString();
 
-    // Chart 1: KH Tuần theo Khách hàng
+    // Chart 1: Tổng Sản lượng theo Khách hàng
     if(chartBrandsRef) chartBrandsRef.destroy();
-    const custLabels = Object.keys(custQtyWeek);
+    const custLabels = Object.keys(custQtyAll);
     if(custLabels.length > 0) {
         chartBrandsRef = new Chart(document.getElementById('chartCustQty'), {
           type: 'pie',
           data: {
-            labels: custLabels.map(k => `${k} (${Math.round(custQtyWeek[k]).toLocaleString()})`),
+            labels: custLabels.map(k => `${k} (${Math.round(custQtyAll[k]).toLocaleString()})`),
             datasets: [{
-              data: Object.values(custQtyWeek),
+              data: Object.values(custQtyAll),
               backgroundColor: ['#42a5f5', '#66bb6a', '#ffa726', '#ef5350', '#ab47bc', '#26c6da', '#ec407a', '#78909c']
             }]
           },
@@ -421,16 +423,16 @@
         });
     }
 
-    // Chart 2: KH Tuần theo Khuôn
-    const topMoldsWeek = Object.entries(moldQtyWeek).sort((a,b) => b[1] - a[1]).slice(0, 10);
+    // Chart 2: Tổng Sản lượng theo Khuôn
+    const topMoldsAll = Object.entries(moldQtyAll).sort((a,b) => b[1] - a[1]).slice(0, 10);
     if(chartMaterialsRef) chartMaterialsRef.destroy();
-    if(topMoldsWeek.length > 0) {
+    if(topMoldsAll.length > 0) {
         chartMaterialsRef = new Chart(document.getElementById('chartMoldQty'), {
           type: 'pie',
           data: {
-            labels: topMoldsWeek.map(x => `${x[0]} (${Math.round(x[1]).toLocaleString()})`),
+            labels: topMoldsAll.map(x => `${x[0]} (${Math.round(x[1]).toLocaleString()})`),
             datasets: [{
-              data: topMoldsWeek.map(x => x[1]),
+              data: topMoldsAll.map(x => x[1]),
               backgroundColor: ['#ff8a65', '#4db6ac', '#7986cb', '#aed581', '#ffd54f', '#9575cd', '#4fc3f7', '#f06292', '#81c784', '#e57373']
             }]
           },
