@@ -13,7 +13,7 @@ const supabase = createClient(SB_URL, SB_KEY);
 // Các cột ngày tháng
 const DATE_COLUMNS = [
   'Load material', 'Laminate Date', 'Sawing cutting date', 
-  'Molding Date', 'Cutting Pairs Date', 'Finished date'
+  'Molding Date', 'Cutting Pairs Date', 'Finished date', 'Load liệu'
 ];
 
 // Các cột số (Ép định dạng số)
@@ -47,7 +47,13 @@ async function sync() {
     console.log(`📦 Đã đọc ${data.length} dòng từ Excel.`);
 
     const processedData = data.map(row => {
-      const newRow = { ...row };
+      const newRow = {};
+      
+      // Trim tất cả các tên cột (keys) để tránh lỗi khoảng trắng dư thừa
+      Object.keys(row).forEach(key => {
+        const trimmedKey = key.trim();
+        newRow[trimmedKey] = row[key];
+      });
 
       // 1. Xử lý các cột Số
       NUMBER_COLUMNS.forEach(col => {
@@ -90,12 +96,14 @@ async function sync() {
     });
 
     console.log('🗑️  Làm sạch return_nvl...');
-    await supabase.from('return_nvl').delete().neq('id', 0);
+    const { error: delErr } = await supabase.from('return_nvl').delete().neq('id', 0);
+    if (delErr) throw delErr;
 
     const batchSize = 300;
     for (let i = 0; i < processedData.length; i += batchSize) {
       const batch = processedData.slice(i, i + batchSize);
-      await supabase.from('return_nvl').insert(batch);
+      const { error: insErr } = await supabase.from('return_nvl').insert(batch);
+      if (insErr) throw insErr;
       console.log(`✅ Đã đẩy: ${i + batch.length}/${processedData.length}`);
     }
 
