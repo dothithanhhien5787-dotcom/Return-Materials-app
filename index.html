@@ -306,7 +306,7 @@
   async function loadDashboard() {
     const { data, error } = await _supabase
       .from('return_nvl')
-      .select('Brand, "PO Q\'TY", PU, Cloth, "Load material", "Finished date", "Load liệu", "Molding Date"')
+      .select('Brand, "PO Q\'TY", PU, Cloth, "Load material", "Finished date", "Load liệu", "Molding Date", "Mold#"')
       .limit(5000); 
 
     if (error) return console.error(error);
@@ -326,30 +326,31 @@
     let lateLoadCount = 0;
     let lateFinishCount = 0;
     
-    // Thống kê trễ theo Brand
-    let brandProgress = {}; 
+    // Thống kê trễ theo Mã khuôn (Mold#)
+    let moldProgress = {}; 
 
     data.forEach(r => {
       let b = r.Brand || 'Khác';
+      let mold = r["Mold#"] || 'N/A';
       brands[b] = (brands[b] || 0) + 1;
       if(r.PU) materialsPU[r.PU] = (materialsPU[r.PU] || 0) + 1;
 
-      if(!brandProgress[b]) brandProgress[b] = { lateLoad: 0, lateFinish: 0 };
+      if(!moldProgress[mold]) moldProgress[mold] = { lateLoad: 0, lateFinish: 0, totalLate: 0 };
 
       // Kiểm tra trễ Load
       const planLoad = parseDMY(r["Load material"]);
-      const actualLoad = r["Load liệu"];
-      if (planLoad && !actualLoad && planLoad < today) {
+      if (planLoad && !r["Load liệu"] && planLoad < today) {
         lateLoadCount++;
-        brandProgress[b].lateLoad++;
+        moldProgress[mold].lateLoad++;
+        moldProgress[mold].totalLate++;
       }
 
       // Kiểm tra trễ Finish
       const planFinish = parseDMY(r["Molding Date"]);
-      const actualFinish = r["Finished date"];
-      if (planFinish && !actualFinish && planFinish < today) {
+      if (planFinish && !r["Finished date"] && planFinish < today) {
         lateFinishCount++;
-        brandProgress[b].lateFinish++;
+        moldProgress[mold].lateFinish++;
+        moldProgress[mold].totalLate++;
       }
     });
 
@@ -358,7 +359,7 @@
     document.getElementById('db-late-finish').innerText = lateFinishCount.toLocaleString();
     document.getElementById('db-total-brands').innerText = Object.keys(brands).length;
 
-    // --- Chart Brands ---
+    // Biểu đồ Brand
     const brandLabelsList = Object.keys(brands);
     if(chartBrandsRef) chartBrandsRef.destroy();
     chartBrandsRef = new Chart(document.getElementById('chartBrands'), {
@@ -373,22 +374,31 @@
       options: { responsive: true, plugins: { legend: { position: 'right', labels: { font: { size: 9 } } } } }
     });
 
-    // --- Chart Late Progress (Bar) ---
-    const sortedBrands = brandLabelsList.filter(b => brandProgress[b].lateLoad > 0 || brandProgress[b].lateFinish > 0);
+    // Biểu đồ Trễ theo Mã Khuôn (Top 10 Mold# trễ nhất)
+    const sortedMolds = Object.entries(moldProgress)
+      .filter(x => x[1].totalLate > 0)
+      .sort((a,b) => b[1].totalLate - a[1].totalLate)
+      .slice(0, 10);
+
     if(chartLateRef) chartLateRef.destroy();
     chartLateRef = new Chart(document.getElementById('chartLateProgress'), {
       type: 'bar',
       data: {
-        labels: sortedBrands,
+        labels: sortedMolds.map(x => x[0]),
         datasets: [
-          { label: 'Trễ Load', data: sortedBrands.map(b => brandProgress[b].lateLoad), backgroundColor: '#fb8c00' },
-          { label: 'Trễ Finish', data: sortedBrands.map(b => brandProgress[b].lateFinish), backgroundColor: '#d81b60' }
+          { label: 'Trễ Load', data: sortedMolds.map(x => x[1].lateLoad), backgroundColor: '#fb8c00' },
+          { label: 'Trễ Finish', data: sortedMolds.map(x => x[1].lateFinish), backgroundColor: '#d81b60' }
         ]
       },
-      options: { responsive: true, scales: { x: { stacked: false }, y: { beginAtZero: true } } }
+      options: { 
+        indexAxis: 'y',
+        responsive: true, 
+        scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } },
+        plugins: { title: { display: true, text: 'TOP 10 MÃ KHUÔN TRỄ NHẤT (ĐƠN)' } }
+      }
     });
 
-    // --- Chart Materials ---
+    // Biểu đồ Vật tư
     const topPU = Object.entries(materialsPU).sort((a,b) => b[1] - a[1]).slice(0, 8);
     if(chartMaterialsRef) chartMaterialsRef.destroy();
     chartMaterialsRef = new Chart(document.getElementById('chartMaterials'), {
