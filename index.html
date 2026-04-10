@@ -308,12 +308,20 @@
   let chartLateRef = null;
 
   async function loadDashboard() {
+    console.log("Đang tải dữ liệu Dashboard...");
     const { data, error } = await _supabase
       .from('return_nvl')
-      .select('Customer, "PO Q\'TY", "Load material", "Load liệu", "Mold#"')
-      .limit(5000); 
+      .select('Customer, "PO Q\'TY", "Load material", "Load liệu", "Mold#", "Ngày tháng"')
+      .order('Ngày tháng', { ascending: false })
+      .limit(3000); 
 
-    if (error) return console.error(error);
+    if (error) {
+        console.error("Lỗi Supabase:", error);
+        return;
+    }
+    
+    console.log("Số dòng nhận được:", data ? data.length : 0);
+    if (!data || data.length === 0) return;
 
     const today = new Date();
     today.setHours(0,0,0,0);
@@ -326,7 +334,9 @@
     sunday.setHours(23,59,59,999);
 
     const parseDMY = (s) => {
-        if(!s || typeof s !== 'string' || !s.includes('/')) return null;
+        if(!s) return null;
+        if(s instanceof Date) return s;
+        if(typeof s !== 'string' || !s.includes('/')) return null;
         let p = s.split('/');
         return new Date(p[2], p[1]-1, p[0]);
     };
@@ -348,17 +358,17 @@
       let planDate = parseDMY(r["Load material"]);
       let actualLoadDate = parseDMY(r["Load liệu"]);
 
-      if(r["Mold#"]) uniqueMolds.add(r["Mold#"]);
+      if(r["Mold#"]) uniqueMolds.add(r["Mold#"].trim());
 
       // 1. Kế hoạch tuần này (Qty & Orders)
-      if (planDate >= monday && planDate <= sunday) {
+      if (planDate && planDate >= monday && planDate <= sunday) {
         weekPlanOrders++;
         weekPlanPairs += qty;
         custQtyWeek[cust] = (custQtyWeek[cust] || 0) + qty;
         moldQtyWeek[mold] = (moldQtyWeek[mold] || 0) + qty;
       }
 
-      // 2. Load Performance (Luôn theo Qty tổng)
+      // 2. Load Performance (Sản lượng tổng)
       if (!r["Load liệu"]) {
          if (planDate && planDate < today) {
             unloadedQtyTotal += qty;
@@ -384,36 +394,41 @@
     document.getElementById('db-late-delivered-qty').innerText = Math.round(lateDeliveredQtyTotal).toLocaleString();
     document.getElementById('db-total-molds').innerText = uniqueMolds.size.toLocaleString();
 
-    // Biểu đồ KH Tuần theo Khách hàng (Sản lượng thực tế)
+    // Chart 1: KH Tuần theo Khách hàng
     if(chartBrandsRef) chartBrandsRef.destroy();
-    chartBrandsRef = new Chart(document.getElementById('chartCustQty'), {
-      type: 'pie',
-      data: {
-        labels: Object.keys(custQtyWeek).map(k => `${k} (${Math.round(custQtyWeek[k]).toLocaleString()})`),
-        datasets: [{
-          data: Object.values(custQtyWeek),
-          backgroundColor: ['#42a5f5', '#66bb6a', '#ffa726', '#ef5350', '#ab47bc', '#26c6da', '#ec407a', '#78909c']
-        }]
-      },
-      options: { responsive: true, plugins: { legend: { position: 'right', labels: { font: { size: 9 } } } } }
-    });
+    const custLabels = Object.keys(custQtyWeek);
+    if(custLabels.length > 0) {
+        chartBrandsRef = new Chart(document.getElementById('chartCustQty'), {
+          type: 'pie',
+          data: {
+            labels: custLabels.map(k => `${k} (${Math.round(custQtyWeek[k]).toLocaleString()})`),
+            datasets: [{
+              data: Object.values(custQtyWeek),
+              backgroundColor: ['#42a5f5', '#66bb6a', '#ffa726', '#ef5350', '#ab47bc', '#26c6da', '#ec407a', '#78909c']
+            }]
+          },
+          options: { responsive: true, plugins: { legend: { position: 'right', labels: { font: { size: 9 } } } } }
+        });
+    }
 
-    // Biểu đồ KH Tuần theo Khuôn (Top 10 Sản lượng)
+    // Chart 2: KH Tuần theo Khuôn
     const topMoldsWeek = Object.entries(moldQtyWeek).sort((a,b) => b[1] - a[1]).slice(0, 10);
     if(chartMaterialsRef) chartMaterialsRef.destroy();
-    chartMaterialsRef = new Chart(document.getElementById('chartMoldQty'), {
-      type: 'pie',
-      data: {
-        labels: topMoldsWeek.map(x => `${x[0]} (${Math.round(x[1]).toLocaleString()})`),
-        datasets: [{
-          data: topMoldsWeek.map(x => x[1]),
-          backgroundColor: ['#ff8a65', '#4db6ac', '#7986cb', '#aed581', '#ffd54f', '#9575cd', '#4fc3f7', '#f06292', '#81c784', '#e57373']
-        }]
-      },
-      options: { responsive: true, plugins: { legend: { position: 'right', labels: { font: { size: 9 } } } } }
-    });
+    if(topMoldsWeek.length > 0) {
+        chartMaterialsRef = new Chart(document.getElementById('chartMoldQty'), {
+          type: 'pie',
+          data: {
+            labels: topMoldsWeek.map(x => `${x[0]} (${Math.round(x[1]).toLocaleString()})`),
+            datasets: [{
+              data: topMoldsWeek.map(x => x[1]),
+              backgroundColor: ['#ff8a65', '#4db6ac', '#7986cb', '#aed581', '#ffd54f', '#9575cd', '#4fc3f7', '#f06292', '#81c784', '#e57373']
+            }]
+          },
+          options: { responsive: true, plugins: { legend: { position: 'right', labels: { font: { size: 9 } } } } }
+        });
+    }
 
-    // Biểu đồ hiệu suất Load liệu
+    // Chart 3: Hiệu suất Load liệu
     if(chartLateRef) chartLateRef.destroy();
     chartLateRef = new Chart(document.getElementById('chartLoadPerformance'), {
       type: 'bar',
@@ -431,7 +446,6 @@
         scales: { y: { beginAtZero: true } }
       }
     });
-  }
   }
 
   // Chạy lần đầu khi mở app
