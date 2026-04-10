@@ -188,30 +188,30 @@
 <div id="db" class="content active">
   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px;">
     <div class="static-box" style="background:#e3f2fd; color:#0d47a1; text-align:center;">
-        <div style="font-size:10px;">📦 TỔNG ĐƠN</div>
-        <div id="db-total-orders" style="font-size:18px; font-weight:900;">0</div>
+        <div style="font-size:10px;">📅 KẾ HOẠCH TUẦN</div>
+        <div id="db-week-plan" style="font-size:18px; font-weight:900;">0</div>
     </div>
     <div class="static-box" style="background:#fff3e0; color:#e65100; text-align:center;">
-        <div style="font-size:10px;">🕒 TRỄ LOAD LIỆU</div>
-        <div id="db-late-load" style="font-size:18px; font-weight:900; color:red;">0</div>
+        <div style="font-size:10px;">❌ CHƯA LOAD (ĐÔI)</div>
+        <div id="db-unloaded-qty" style="font-size:18px; font-weight:900; color:red;">0</div>
     </div>
     <div class="static-box" style="background:#fce4ec; color:#880e4f; text-align:center;">
-        <div style="font-size:10px;">⚠️ TRỄ FINISH</div>
-        <div id="db-late-finish" style="font-size:18px; font-weight:900; color:red;">0</div>
+        <div style="font-size:10px;">🕒 GIAO TRỄ (ĐÔI)</div>
+        <div id="db-late-delivered-qty" style="font-size:18px; font-weight:900; color:#ad1457;">0</div>
     </div>
     <div class="static-box" style="background:#e8f5e9; color:#1b5e20; text-align:center;">
-        <div style="font-size:10px;">🏷️ BRAND</div>
-        <div id="db-total-brands" style="font-size:18px; font-weight:900;">0</div>
+        <div style="font-size:10px;">🏷️ TỔNG KHUÔN</div>
+        <div id="db-total-molds" style="font-size:18px; font-weight:900;">0</div>
     </div>
   </div>
 
   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
     <div style="background:white; padding:15px; border-radius:12px; border:1px solid #ddd;">
-      <div style="font-weight:bold; font-size:12px; margin-bottom:10px; color:#444;">📊 TỔNG QUAN THƯƠNG HIỆU</div>
+      <div style="font-weight:bold; font-size:12px; margin-bottom:10px; color:#444;">📊 TỔNG QUAN KHÁCH HÀNG (DC)</div>
       <canvas id="chartBrands"></canvas>
     </div>
     <div style="background:white; padding:15px; border-radius:12px; border:1px solid #ddd;">
-      <div style="font-weight:bold; font-size:12px; margin-bottom:10px; color:#c62828;">🚨 TRỄ TIẾN ĐỘ THEO BRAND</div>
+      <div style="font-weight:bold; font-size:12px; margin-bottom:10px; color:#c62828;">🚨 TOP KHUÔN TRỄ SẢN LƯỢNG</div>
       <canvas id="chartLateProgress"></canvas>
     </div>
   </div>
@@ -306,7 +306,7 @@
   async function loadDashboard() {
     const { data, error } = await _supabase
       .from('return_nvl')
-      .select('Brand, "PO Q\'TY", PU, Cloth, "Load material", "Finished date", "Load liệu", "Molding Date", "Mold#"')
+      .select('Customer, Brand, "PO Q\'TY", PU, Cloth, "Load material", "Finished date", "Load liệu", "Molding Date", "Mold#"')
       .limit(5000); 
 
     if (error) return console.error(error);
@@ -314,77 +314,84 @@
     const today = new Date();
     today.setHours(0,0,0,0);
 
+    // Tính range tuần này (Thứ 2 - Chủ Nhật)
+    const day = today.getDay();
+    const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(new Date(today).setDate(diff));
+    monday.setHours(0,0,0,0);
+    const sunday = new Date(new Date(monday).setDate(monday.getDate() + 6));
+    sunday.setHours(23,59,59,999);
+
     const parseDMY = (s) => {
         if(!s || typeof s !== 'string' || !s.includes('/')) return null;
         let p = s.split('/');
         return new Date(p[2], p[1]-1, p[0]);
     };
 
-    let totalOrders = data.length;
-    let totalQtyAll = 0;
-    let brands = {};
-    let materialsPU = {};
-    let totalLateLoadQty = 0;
-    let totalLateFinishQty = 0;
-    
+    let weekPlanOrders = 0;
+    let customers = {};
+    let unloadedQtyTotal = 0;
+    let lateDeliveredQtyTotal = 0;
     let moldProgress = {}; 
 
     data.forEach(r => {
-      let b = r.Brand || 'Khác';
+      let cust = r.Customer || 'Khác';
       let mold = r["Mold#"] || 'N/A';
       let qty = parseFloat(r["PO Q'TY"]) || 0;
-      
-      totalQtyAll += qty;
-      brands[b] = (brands[b] || 0) + 1;
-      if(r.PU) materialsPU[r.PU] = (materialsPU[r.PU] || 0) + 1;
+      let planDate = parseDMY(r["Load material"]);
+      let actualLoadDate = parseDMY(r["Load liệu"]);
 
-      if(!moldProgress[mold]) moldProgress[mold] = { lateLoadQty: 0, lateFinishQty: 0, totalLateQty: 0 };
-
-      // Kiểm tra trễ Load (AA vs K)
-      const planLoad = parseDMY(r["Load material"]);
-      if (planLoad && !r["Load liệu"] && planLoad < today) {
-        totalLateLoadQty += qty;
-        moldProgress[mold].lateLoadQty += qty;
-        moldProgress[mold].totalLateQty += qty;
+      // 1. Đếm kế hoạch tuần này
+      if (planDate >= monday && planDate <= sunday) {
+        weekPlanOrders++;
       }
 
-      // Kiểm tra trễ Finish (P vs N)
-      const planFinish = parseDMY(r["Molding Date"]);
-      if (planFinish && !r["Finished date"] && planFinish < today) {
-        totalLateFinishQty += qty;
-        moldProgress[mold].lateFinishQty += qty;
-        moldProgress[mold].totalLateQty += qty;
+      // 2. Thống kê theo Khách hàng (DC)
+      customers[cust] = (customers[cust] || 0) + 1;
+
+      // 3. Logic Trễ Load
+      if(!moldProgress[mold]) moldProgress[mold] = { unLoad: 0, lateLoad: 0, total: 0 };
+
+      if (!r["Load liệu"]) {
+        // Chưa load: AA trống
+        if (planDate && planDate < today) {
+           unloadedQtyTotal += qty;
+           moldProgress[mold].unLoad += qty;
+           moldProgress[mold].total += qty;
+        }
+      } else {
+        // Đã load: Kiểm tra có trễ so với K không
+        if (planDate && actualLoadDate && actualLoadDate > planDate) {
+           lateDeliveredQtyTotal += qty;
+           moldProgress[mold].lateLoad += qty;
+           moldProgress[mold].total += qty;
+        }
       }
     });
 
-    document.getElementById('db-total-orders').innerText = totalOrders.toLocaleString();
-    document.getElementById('db-late-load').innerText = Math.round(totalLateLoadQty).toLocaleString();
-    document.getElementById('db-late-finish').innerText = Math.round(totalLateFinishQty).toLocaleString();
-    document.getElementById('db-total-brands').innerText = Object.keys(brands).length;
-    
-    // Đổi nhãn trong UI để người dùng biết là tính theo ĐÔI
-    document.querySelector('#db-late-load').parentElement.querySelector('div').innerText = "🕒 TRỄ LOAD (ĐÔI)";
-    document.querySelector('#db-late-finish').parentElement.querySelector('div').innerText = "⚠️ TRỄ FINISH (ĐÔI)";
+    document.getElementById('db-week-plan').innerText = weekPlanOrders.toLocaleString();
+    document.getElementById('db-unloaded-qty').innerText = Math.round(unloadedQtyTotal).toLocaleString();
+    document.getElementById('db-late-delivered-qty').innerText = Math.round(lateDeliveredQtyTotal).toLocaleString();
+    document.getElementById('db-total-molds').innerText = Object.keys(moldProgress).length;
 
-    // Biểu đồ Brand
-    const brandLabelsList = Object.keys(brands);
+    // Biểu đồ Khách hàng (Pie)
     if(chartBrandsRef) chartBrandsRef.destroy();
     chartBrandsRef = new Chart(document.getElementById('chartBrands'), {
       type: 'pie',
       data: {
-        labels: brandLabelsList,
+        labels: Object.keys(customers),
         datasets: [{
-          data: Object.values(brands),
+          data: Object.values(customers),
           backgroundColor: ['#42a5f5', '#66bb6a', '#ffa726', '#ef5350', '#ab47bc', '#26c6da', '#ec407a', '#78909c']
         }]
       },
       options: { responsive: true, plugins: { legend: { position: 'right', labels: { font: { size: 9 } } } } }
     });
 
-    // Biểu đồ Trễ theo Mã Khuôn (Top 10 Mold# trễ nhất theo SẢN LƯỢNG)
+    // Biểu đồ Top Khuôn trễ nhất
     const sortedMolds = Object.entries(moldProgress)
-      .filter(x => x[1].totalLateQty > 0)
-      .sort((a,b) => b[1].totalLateQty - a[1].totalLateQty)
+      .filter(x => x[1].total > 0)
+      .sort((a,b) => b[1].total - a[1].total)
       .slice(0, 10);
 
     if(chartLateRef) chartLateRef.destroy();
@@ -393,20 +400,18 @@
       data: {
         labels: sortedMolds.map(x => x[0]),
         datasets: [
-          { label: 'Sản lượng trễ Load', data: sortedMolds.map(x => x[1].lateLoadQty), backgroundColor: '#fb8c00' },
-          { label: 'Sản lượng trễ Finish', data: sortedMolds.map(x => x[1].lateFinishQty), backgroundColor: '#d81b60' }
+          { label: 'Chưa Load (Đôi)', data: sortedMolds.map(x => x[1].unLoad), backgroundColor: '#fb8c00' },
+          { label: 'Giao Trễ (Đôi)', data: sortedMolds.map(x => x[1].lateLoad), backgroundColor: '#d81b60' }
         ]
       },
       options: { 
         indexAxis: 'y',
         responsive: true, 
-        scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } },
-        plugins: { 
-            title: { display: true, text: 'TOP 10 MÃ KHUÔN TRỄ NHẤT (SẢN LƯỢNG ĐÔI)' },
-            legend: { labels: { font: { size: 10 } } }
-        }
+        scales: { x: { stacked: true }, y: { stacked: true } },
+        plugins: { title: { display: true, text: 'TOP 10 KHUÔN ĐANG CHẬM TRỄ' } }
       }
     });
+  }
 
     // Biểu đồ Vật tư
     const topPU = Object.entries(materialsPU).sort((a,b) => b[1] - a[1]).slice(0, 8);
