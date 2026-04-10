@@ -186,29 +186,39 @@
 </div>
     
 <div id="db" class="content active">
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 20px;">
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px;">
     <div class="static-box" style="background:#e3f2fd; color:#0d47a1; text-align:center;">
         <div style="font-size:10px;">📦 TỔNG ĐƠN</div>
         <div id="db-total-orders" style="font-size:18px; font-weight:900;">0</div>
     </div>
-    <div class="static-box" style="background:#e8f5e9; color:#1b5e20; text-align:center;">
-        <div style="font-size:10px;">👞 TỔNG SẢN LƯỢNG</div>
-        <div id="db-total-qty" style="font-size:18px; font-weight:900;">0</div>
-    </div>
     <div class="static-box" style="background:#fff3e0; color:#e65100; text-align:center;">
+        <div style="font-size:10px;">🕒 TRỄ LOAD LIỆU</div>
+        <div id="db-late-load" style="font-size:18px; font-weight:900; color:red;">0</div>
+    </div>
+    <div class="static-box" style="background:#fce4ec; color:#880e4f; text-align:center;">
+        <div style="font-size:10px;">⚠️ TRỄ FINISH</div>
+        <div id="db-late-finish" style="font-size:18px; font-weight:900; color:red;">0</div>
+    </div>
+    <div class="static-box" style="background:#e8f5e9; color:#1b5e20; text-align:center;">
         <div style="font-size:10px;">🏷️ BRAND</div>
         <div id="db-total-brands" style="font-size:18px; font-weight:900;">0</div>
     </div>
   </div>
 
-  <div style="background:white; padding:15px; border-radius:12px; border:1px solid #ddd; margin-bottom:15px;">
-    <div style="font-weight:bold; font-size:12px; margin-bottom:10px; color:#444;">📊 TỶ TRỌNG THƯƠNG HIỆU</div>
-    <canvas id="chartBrands" style="max-height:250px;"></canvas>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+    <div style="background:white; padding:15px; border-radius:12px; border:1px solid #ddd;">
+      <div style="font-weight:bold; font-size:12px; margin-bottom:10px; color:#444;">📊 TỔNG QUAN THƯƠNG HIỆU</div>
+      <canvas id="chartBrands"></canvas>
+    </div>
+    <div style="background:white; padding:15px; border-radius:12px; border:1px solid #ddd;">
+      <div style="font-weight:bold; font-size:12px; margin-bottom:10px; color:#c62828;">🚨 TRỄ TIẾN ĐỘ THEO BRAND</div>
+      <canvas id="chartLateProgress"></canvas>
+    </div>
   </div>
 
-  <div style="background:white; padding:15px; border-radius:12px; border:1px solid #ddd;">
-    <div style="font-weight:bold; font-size:12px; margin-bottom:10px; color:#444;">📈 TOP VẬT TƯ PHỔ BIẾN</div>
-    <canvas id="chartMaterials" style="max-height:250px;"></canvas>
+  <div style="background:white; padding:15px; border-radius:12px; border:1px solid #ddd; margin-top:20px;">
+    <div style="font-weight:bold; font-size:12px; margin-bottom:10px; color:#444;">📈 TOP VẬT TƯ PU PHỔ BIẾN</div>
+    <canvas id="chartMaterials" style="max-height:200px;"></canvas>
   </div>
 </div>
 
@@ -291,64 +301,103 @@
   // --- DASHBOARD LOGIC ---
   let chartBrandsRef = null;
   let chartMaterialsRef = null;
+  let chartLateRef = null;
 
   async function loadDashboard() {
     const { data, error } = await _supabase
       .from('return_nvl')
-      .select('Brand, "PO Q\'TY", PU, Cloth')
+      .select('Brand, "PO Q\'TY", PU, Cloth, "Load material", "Finished date", "Load liệu", "Molding Date"')
       .limit(5000); 
 
     if (error) return console.error(error);
 
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    const parseDMY = (s) => {
+        if(!s || typeof s !== 'string' || !s.includes('/')) return null;
+        let p = s.split('/');
+        return new Date(p[2], p[1]-1, p[0]);
+    };
+
     let totalOrders = data.length;
-    let totalQty = 0;
     let brands = {};
     let materialsPU = {};
+    let lateLoadCount = 0;
+    let lateFinishCount = 0;
+    
+    // Thống kê trễ theo Brand
+    let brandProgress = {}; 
 
     data.forEach(r => {
-      totalQty += parseFloat(r["PO Q'TY"]) || 0;
       let b = r.Brand || 'Khác';
       brands[b] = (brands[b] || 0) + 1;
       if(r.PU) materialsPU[r.PU] = (materialsPU[r.PU] || 0) + 1;
+
+      if(!brandProgress[b]) brandProgress[b] = { lateLoad: 0, lateFinish: 0 };
+
+      // Kiểm tra trễ Load
+      const planLoad = parseDMY(r["Load material"]);
+      const actualLoad = r["Load liệu"];
+      if (planLoad && !actualLoad && planLoad < today) {
+        lateLoadCount++;
+        brandProgress[b].lateLoad++;
+      }
+
+      // Kiểm tra trễ Finish
+      const planFinish = parseDMY(r["Molding Date"]);
+      const actualFinish = r["Finished date"];
+      if (planFinish && !actualFinish && planFinish < today) {
+        lateFinishCount++;
+        brandProgress[b].lateFinish++;
+      }
     });
 
     document.getElementById('db-total-orders').innerText = totalOrders.toLocaleString();
-    document.getElementById('db-total-qty').innerText = Math.round(totalQty).toLocaleString();
+    document.getElementById('db-late-load').innerText = lateLoadCount.toLocaleString();
+    document.getElementById('db-late-finish').innerText = lateFinishCount.toLocaleString();
     document.getElementById('db-total-brands').innerText = Object.keys(brands).length;
 
-    const brandLabels = Object.keys(brands);
-    const brandData = Object.values(brands);
+    // --- Chart Brands ---
+    const brandLabelsList = Object.keys(brands);
     if(chartBrandsRef) chartBrandsRef.destroy();
     chartBrandsRef = new Chart(document.getElementById('chartBrands'), {
       type: 'pie',
       data: {
-        labels: brandLabels,
+        labels: brandLabelsList,
         datasets: [{
-          data: brandData,
+          data: Object.values(brands),
           backgroundColor: ['#42a5f5', '#66bb6a', '#ffa726', '#ef5350', '#ab47bc', '#26c6da', '#ec407a', '#78909c']
         }]
       },
       options: { responsive: true, plugins: { legend: { position: 'right', labels: { font: { size: 9 } } } } }
     });
 
-    const topPU = Object.entries(materialsPU).sort((a,b) => b[1] - a[1]).slice(0, 5);
+    // --- Chart Late Progress (Bar) ---
+    const sortedBrands = brandLabelsList.filter(b => brandProgress[b].lateLoad > 0 || brandProgress[b].lateFinish > 0);
+    if(chartLateRef) chartLateRef.destroy();
+    chartLateRef = new Chart(document.getElementById('chartLateProgress'), {
+      type: 'bar',
+      data: {
+        labels: sortedBrands,
+        datasets: [
+          { label: 'Trễ Load', data: sortedBrands.map(b => brandProgress[b].lateLoad), backgroundColor: '#fb8c00' },
+          { label: 'Trễ Finish', data: sortedBrands.map(b => brandProgress[b].lateFinish), backgroundColor: '#d81b60' }
+        ]
+      },
+      options: { responsive: true, scales: { x: { stacked: false }, y: { beginAtZero: true } } }
+    });
+
+    // --- Chart Materials ---
+    const topPU = Object.entries(materialsPU).sort((a,b) => b[1] - a[1]).slice(0, 8);
     if(chartMaterialsRef) chartMaterialsRef.destroy();
     chartMaterialsRef = new Chart(document.getElementById('chartMaterials'), {
       type: 'bar',
       data: {
         labels: topPU.map(x => x[0]),
-        datasets: [{
-          label: 'Lượt dùng',
-          data: topPU.map(x => x[1]),
-          backgroundColor: '#455a64'
-        }]
+        datasets: [{ label: 'Lượt dùng', data: topPU.map(x => x[1]), backgroundColor: '#455a64' }]
       },
-      options: { 
-        indexAxis: 'y', 
-        responsive: true, 
-        plugins: { legend: { display: false } },
-        scales: { x: { grid: { display: false } }, y: { grid: { display: false } } }
-      }
+      options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } } }
     });
   }
 
