@@ -178,13 +178,41 @@
 <body>
     
 <div class="tabs">
-  <div id="t-sx" class="tab active" onclick="openTab('sx')">SẢN XUẤT</div>
+  <div id="t-db" class="tab active" onclick="openTab('db')">DASHBOARD</div>
+  <div id="t-sx" class="tab" onclick="openTab('sx')">SẢN XUẤT</div>
   <div id="t-kho" class="tab" onclick="openTab('kho')">THỦ KHO</div>
   <div id="t-lookup" class="tab" onclick="openTab('lookup')">TRA CỨU</div>
   <div id="t-rep" class="tab" onclick="openTab('rep')">BÁO CÁO</div>
 </div>
     
-<div id="sx" class="content active">
+<div id="db" class="content active">
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 20px;">
+    <div class="static-box" style="background:#e3f2fd; color:#0d47a1; text-align:center;">
+        <div style="font-size:10px;">📦 TỔNG ĐƠN</div>
+        <div id="db-total-orders" style="font-size:18px; font-weight:900;">0</div>
+    </div>
+    <div class="static-box" style="background:#e8f5e9; color:#1b5e20; text-align:center;">
+        <div style="font-size:10px;">👞 TỔNG SẢN LƯỢNG</div>
+        <div id="db-total-qty" style="font-size:18px; font-weight:900;">0</div>
+    </div>
+    <div class="static-box" style="background:#fff3e0; color:#e65100; text-align:center;">
+        <div style="font-size:10px;">🏷️ BRAND</div>
+        <div id="db-total-brands" style="font-size:18px; font-weight:900;">0</div>
+    </div>
+  </div>
+
+  <div style="background:white; padding:15px; border-radius:12px; border:1px solid #ddd; margin-bottom:15px;">
+    <div style="font-weight:bold; font-size:12px; margin-bottom:10px; color:#444;">📊 TỶ TRỌNG THƯƠNG HIỆU</div>
+    <canvas id="chartBrands" style="max-height:250px;"></canvas>
+  </div>
+
+  <div style="background:white; padding:15px; border-radius:12px; border:1px solid #ddd;">
+    <div style="font-weight:bold; font-size:12px; margin-bottom:10px; color:#444;">📈 TOP VẬT TƯ PHỔ BIẾN</div>
+    <canvas id="chartMaterials" style="max-height:250px;"></canvas>
+  </div>
+</div>
+
+<div id="sx" class="content">
   <div style="display: flex; gap: 10px; margin-bottom: 15px;">
     <button class="btn btn-cam" onclick="startCamera()">📷 CAMERA</button>
     <button class="btn btn-upload" onclick="document.getElementById('file-input').click()">📸 CHỤP ẢNH</button>
@@ -238,6 +266,7 @@
   <div id="resRep" style="margin-top:15px"></div>
 </div>
     
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
   var curData = null; 
@@ -256,8 +285,76 @@
     document.getElementById(id).classList.add('active');
     stopCamera();
     if(id === 'kho') loadPending();
+    if(id === 'db') loadDashboard();
   }
     
+  // --- DASHBOARD LOGIC ---
+  let chartBrandsRef = null;
+  let chartMaterialsRef = null;
+
+  async function loadDashboard() {
+    const { data, error } = await _supabase
+      .from('return_nvl')
+      .select('Brand, "PO Q\'TY", PU, Cloth')
+      .limit(5000); 
+
+    if (error) return console.error(error);
+
+    let totalOrders = data.length;
+    let totalQty = 0;
+    let brands = {};
+    let materialsPU = {};
+
+    data.forEach(r => {
+      totalQty += parseFloat(r["PO Q'TY"]) || 0;
+      let b = r.Brand || 'Khác';
+      brands[b] = (brands[b] || 0) + 1;
+      if(r.PU) materialsPU[r.PU] = (materialsPU[r.PU] || 0) + 1;
+    });
+
+    document.getElementById('db-total-orders').innerText = totalOrders.toLocaleString();
+    document.getElementById('db-total-qty').innerText = Math.round(totalQty).toLocaleString();
+    document.getElementById('db-total-brands').innerText = Object.keys(brands).length;
+
+    const brandLabels = Object.keys(brands);
+    const brandData = Object.values(brands);
+    if(chartBrandsRef) chartBrandsRef.destroy();
+    chartBrandsRef = new Chart(document.getElementById('chartBrands'), {
+      type: 'pie',
+      data: {
+        labels: brandLabels,
+        datasets: [{
+          data: brandData,
+          backgroundColor: ['#42a5f5', '#66bb6a', '#ffa726', '#ef5350', '#ab47bc', '#26c6da', '#ec407a', '#78909c']
+        }]
+      },
+      options: { responsive: true, plugins: { legend: { position: 'right', labels: { font: { size: 9 } } } } }
+    });
+
+    const topPU = Object.entries(materialsPU).sort((a,b) => b[1] - a[1]).slice(0, 5);
+    if(chartMaterialsRef) chartMaterialsRef.destroy();
+    chartMaterialsRef = new Chart(document.getElementById('chartMaterials'), {
+      type: 'bar',
+      data: {
+        labels: topPU.map(x => x[0]),
+        datasets: [{
+          label: 'Lượt dùng',
+          data: topPU.map(x => x[1]),
+          backgroundColor: '#455a64'
+        }]
+      },
+      options: { 
+        indexAxis: 'y', 
+        responsive: true, 
+        plugins: { legend: { display: false } },
+        scales: { x: { grid: { display: false } }, y: { grid: { display: false } } }
+      }
+    });
+  }
+
+  // Chạy lần đầu khi mở app
+  loadDashboard();
+
   // --- CAMERA LOGIC ---
   function startCamera() {
     document.getElementById('reader').style.display = 'block';
