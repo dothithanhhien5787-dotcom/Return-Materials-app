@@ -178,55 +178,14 @@
 <body>
     
 <div class="tabs">
-  <div id="t-db" class="tab active" onclick="openTab('db')">DASHBOARD</div>
-  <div id="t-sx" class="tab" onclick="openTab('sx')">SẢN XUẤT</div>
+  <div id="t-sx" class="tab active" onclick="openTab('sx')">SẢN XUẤT</div>
   <div id="t-kho" class="tab" onclick="openTab('kho')">THỦ KHO</div>
   <div id="t-lookup" class="tab" onclick="openTab('lookup')">TRA CỨU</div>
   <div id="t-rep" class="tab" onclick="openTab('rep')">BÁO CÁO</div>
 </div>
     
-<div id="db" class="content active">
-  <!-- Cards Row -->
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px;">
-    <div class="static-box" style="background:#e3f2fd; color:#0d47a1; text-align:center; border:2px solid #2196f3;">
-        <div style="font-size:10px; font-weight:800;">📅 KH TUẦN NÀY (ĐÔI)</div>
-        <div id="db-week-plan-qty" style="font-size:18px; font-weight:900;">0</div>
-        <div id="db-week-plan-orders" style="font-size:9px; margin-top:2px;">(0 đơn hàng)</div>
-    </div>
-    <div class="static-box" style="background:#fff3e0; color:#e65100; text-align:center;">
-        <div style="font-size:10px;">❌ CHƯA LOAD (ĐÔI)</div>
-        <div id="db-unloaded-qty" style="font-size:18px; font-weight:900; color:red;">0</div>
-    </div>
-    <div class="static-box" style="background:#fce4ec; color:#880e4f; text-align:center;">
-        <div style="font-size:10px;">🕒 GIAO TRỄ (ĐÔI)</div>
-        <div id="db-late-delivered-qty" style="font-size:18px; font-weight:900; color:#ad1457;">0</div>
-    </div>
-    <div class="static-box" style="background:#e8f5e9; color:#1b5e20; text-align:center;">
-        <div style="font-size:10px;">🏷️ TỔNG KHUÔN</div>
-        <div id="db-total-molds" style="font-size:18px; font-weight:900;">0</div>
-    </div>
-  </div>
 
-  <!-- Weekly Overview Charts -->
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 20px;">
-    <div style="background:white; padding:15px; border-radius:12px; border:1px solid #ddd; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-      <div style="font-weight:bold; font-size:12px; margin-bottom:10px; color:#444; border-left:4px solid #2196f3; padding-left:8px;">📊 KH TUẦN: SL THEO KHÁCH (DC)</div>
-      <canvas id="chartCustQty" style="max-height:280px;"></canvas>
-    </div>
-    <div style="background:white; padding:15px; border-radius:12px; border:1px solid #ddd; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-      <div style="font-weight:bold; font-size:12px; margin-bottom:10px; color:#444; border-left:4px solid #4caf50; padding-left:8px;">📊 KH TUẦN: TOP 10 SL THEO KHUÔN</div>
-      <canvas id="chartMoldQty" style="max-height:280px;"></canvas>
-    </div>
-  </div>
-
-  <!-- Loading Performance Analysis -->
-  <div style="background:white; padding:15px; border-radius:12px; border:1px solid #ddd; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-    <div style="font-weight:bold; font-size:12px; margin-bottom:10px; color:#1976d2; border-left:4px solid #f44336; padding-left:8px;">📈 HIỆU SUẤT LOAD LIỆU TỔNG THỂ (THEO SẢN LƯỢNG)</div>
-    <canvas id="chartLoadPerformance" style="max-height:250px;"></canvas>
-  </div>
-</div>
-
-<div id="sx" class="content">
+<div id="sx" class="content active">
   <div style="display: flex; gap: 10px; margin-bottom: 15px;">
     <button class="btn btn-cam" onclick="startCamera()">📷 CAMERA</button>
     <button class="btn btn-upload" onclick="document.getElementById('file-input').click()">📸 CHỤP ẢNH</button>
@@ -280,7 +239,6 @@
   <div id="resRep" style="margin-top:15px"></div>
 </div>
     
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
   var curData = null; 
@@ -299,169 +257,9 @@
     document.getElementById(id).classList.add('active');
     stopCamera();
     if(id === 'kho') loadPending();
-    if(id === 'db') loadDashboard();
   }
     
-  // --- DASHBOARD LOGIC ---
-  let chartBrandsRef = null;
-  let chartMaterialsRef = null;
-  let chartLateRef = null;
 
-  async function loadDashboard() {
-    console.log("Đang tải dữ liệu Dashboard...");
-    const { data, error } = await _supabase
-      .from('return_nvl')
-      .select('*')
-      .order('id', { ascending: false })
-      .limit(4000); 
-
-    if (error) {
-        console.error("Lỗi Supabase:", error);
-        return;
-    }
-    
-    console.log("Số dòng nhận được:", data ? data.length : 0);
-    if (!data || data.length === 0) {
-        document.getElementById('db-total-molds').innerText = "0 (No Data)";
-        return;
-    }
-
-    const today = new Date();
-    today.setHours(0,0,0,0);
-
-    const day = today.getDay();
-    const diff = today.getDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(new Date(today).setDate(diff));
-    monday.setHours(0,0,0,0);
-    const sunday = new Date(new Date(monday).setDate(monday.getDate() + 6));
-    sunday.setHours(23,59,59,999);
-
-    const flexParseDate = (s) => {
-        if(!s) return null;
-        if(s instanceof Date) return s;
-        let d = new Date(s);
-        if(!isNaN(d.getTime())) return d;
-        // Handle DD/MM/YYYY
-        if(typeof s === 'string' && s.includes('/')) {
-            let p = s.split('/');
-            if(p.length === 3) return new Date(p[2], p[1]-1, p[0]);
-        }
-        return null;
-    };
-
-    let weekPlanOrders = 0;
-    let weekPlanPairs = 0;
-    let custQtyAll = {};
-    let moldQtyAll = {};
-    let unloadedQtyTotal = 0;
-    let lateDeliveredQtyTotal = 0;
-    let uniqueMolds = new Set();
-    
-    let performance = { early: 0, onTime: 0, late: 0, waiting: 0 };
-
-    data.forEach(r => {
-      let cust = r.Customer || 'Khác';
-      let mold = r["Mold#"] || 'N/A';
-      let qty = parseFloat(r["PO Q'TY"]) || 0;
-      let planDate = flexParseDate(r["Load material"]);
-      let actualLoadDate = flexParseDate(r["Load liệu"]);
-
-      if(r["Mold#"]) uniqueMolds.add(r["Mold#"].trim());
-
-      // 1. Kế hoạch tuần này
-      if (planDate && planDate >= monday && planDate <= sunday) {
-        weekPlanOrders++;
-        weekPlanPairs += qty;
-      }
-
-      // 2. Tổng quan sản lượng (Toàn bộ 4000 dòng)
-      custQtyAll[cust] = (custQtyAll[cust] || 0) + qty;
-      moldQtyAll[mold] = (moldQtyAll[mold] || 0) + qty;
-
-      // 3. Performance
-      if (!r["Load liệu"] || r["Load liệu"] === "") {
-         if (planDate && planDate < today) {
-            unloadedQtyTotal += qty;
-            performance.waiting += qty;
-         }
-      } else {
-         if (planDate && actualLoadDate) {
-            const pTime = new Date(planDate).setHours(0,0,0,0);
-            const aTime = new Date(actualLoadDate).setHours(0,0,0,0);
-            if (aTime < pTime) {
-               performance.early += qty;
-            } else if (aTime === pTime) {
-               performance.onTime += qty;
-            } else {
-               performance.late += qty;
-               lateDeliveredQtyTotal += qty;
-            }
-         }
-      }
-    });
-
-    document.getElementById('db-week-plan-qty').innerText = Math.round(weekPlanPairs).toLocaleString();
-    document.getElementById('db-week-plan-orders').innerText = `(${weekPlanOrders.toLocaleString()} đơn hàng)`;
-    document.getElementById('db-unloaded-qty').innerText = Math.round(unloadedQtyTotal).toLocaleString();
-    document.getElementById('db-late-delivered-qty').innerText = Math.round(lateDeliveredQtyTotal).toLocaleString();
-    document.getElementById('db-total-molds').innerText = uniqueMolds.size.toLocaleString();
-
-    // Chart 1: Tổng Sản lượng theo Khách hàng
-    if(chartBrandsRef) chartBrandsRef.destroy();
-    const custLabels = Object.keys(custQtyAll);
-    if(custLabels.length > 0) {
-        chartBrandsRef = new Chart(document.getElementById('chartCustQty'), {
-          type: 'pie',
-          data: {
-            labels: custLabels.map(k => `${k} (${Math.round(custQtyAll[k]).toLocaleString()})`),
-            datasets: [{
-              data: Object.values(custQtyAll),
-              backgroundColor: ['#42a5f5', '#66bb6a', '#ffa726', '#ef5350', '#ab47bc', '#26c6da', '#ec407a', '#78909c']
-            }]
-          },
-          options: { responsive: true, plugins: { legend: { position: 'right', labels: { font: { size: 9 } } } } }
-        });
-    }
-
-    // Chart 2: Tổng Sản lượng theo Khuôn
-    const topMoldsAll = Object.entries(moldQtyAll).sort((a,b) => b[1] - a[1]).slice(0, 10);
-    if(chartMaterialsRef) chartMaterialsRef.destroy();
-    if(topMoldsAll.length > 0) {
-        chartMaterialsRef = new Chart(document.getElementById('chartMoldQty'), {
-          type: 'pie',
-          data: {
-            labels: topMoldsAll.map(x => `${x[0]} (${Math.round(x[1]).toLocaleString()})`),
-            datasets: [{
-              data: topMoldsAll.map(x => x[1]),
-              backgroundColor: ['#ff8a65', '#4db6ac', '#7986cb', '#aed581', '#ffd54f', '#9575cd', '#4fc3f7', '#f06292', '#81c784', '#e57373']
-            }]
-          },
-          options: { responsive: true, plugins: { legend: { position: 'right', labels: { font: { size: 9 } } } } }
-        });
-    }
-
-    // Chart 3: Phân tích hiệu suất Load liệu
-    if(chartLateRef) chartLateRef.destroy();
-    chartLateRef = new Chart(document.getElementById('chartLoadPerformance'), {
-      type: 'bar',
-      data: {
-        labels: ['Trước hạn', 'Đúng hạn', 'Trễ hạn', 'Chưa Load (Trễ)'],
-        datasets: [{
-          label: 'Sản lượng (Đôi)',
-          data: [performance.early, performance.onTime, performance.late, performance.waiting],
-          backgroundColor: ['#4caf50', '#2196f3', '#f44336', '#ff9800']
-        }]
-      },
-      options: { 
-        responsive: true, 
-        plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true } }
-      }
-    });
-  }
-
-  // Chạy lần đầu khi mở app
-  loadDashboard();
 
   // --- CAMERA LOGIC ---
   function startCamera() {
