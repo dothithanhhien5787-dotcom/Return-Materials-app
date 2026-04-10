@@ -312,7 +312,8 @@
     const { data, error } = await _supabase
       .from('return_nvl')
       .select('*')
-      .limit(3000); 
+      .order('id', { ascending: false })
+      .limit(4000); 
 
     if (error) {
         console.error("Lỗi Supabase:", error);
@@ -320,7 +321,10 @@
     }
     
     console.log("Số dòng nhận được:", data ? data.length : 0);
-    if (!data || data.length === 0) return;
+    if (!data || data.length === 0) {
+        document.getElementById('db-total-molds').innerText = "0 (No Data)";
+        return;
+    }
 
     const today = new Date();
     today.setHours(0,0,0,0);
@@ -332,12 +336,17 @@
     const sunday = new Date(new Date(monday).setDate(monday.getDate() + 6));
     sunday.setHours(23,59,59,999);
 
-    const parseDMY = (s) => {
+    const flexParseDate = (s) => {
         if(!s) return null;
         if(s instanceof Date) return s;
-        if(typeof s !== 'string' || !s.includes('/')) return null;
-        let p = s.split('/');
-        return new Date(p[2], p[1]-1, p[0]);
+        let d = new Date(s);
+        if(!isNaN(d.getTime())) return d;
+        // Handle DD/MM/YYYY
+        if(typeof s === 'string' && s.includes('/')) {
+            let p = s.split('/');
+            if(p.length === 3) return new Date(p[2], p[1]-1, p[0]);
+        }
+        return null;
     };
 
     let weekPlanOrders = 0;
@@ -354,12 +363,12 @@
       let cust = r.Customer || 'Khác';
       let mold = r["Mold#"] || 'N/A';
       let qty = parseFloat(r["PO Q'TY"]) || 0;
-      let planDate = parseDMY(r["Load material"]);
-      let actualLoadDate = parseDMY(r["Load liệu"]);
+      let planDate = flexParseDate(r["Load material"]);
+      let actualLoadDate = flexParseDate(r["Load liệu"]);
 
       if(r["Mold#"]) uniqueMolds.add(r["Mold#"].trim());
 
-      // 1. Kế hoạch tuần này (Qty & Orders)
+      // 1. Kế hoạch tuần này
       if (planDate && planDate >= monday && planDate <= sunday) {
         weekPlanOrders++;
         weekPlanPairs += qty;
@@ -367,17 +376,19 @@
         moldQtyWeek[mold] = (moldQtyWeek[mold] || 0) + qty;
       }
 
-      // 2. Load Performance (Sản lượng tổng)
-      if (!r["Load liệu"]) {
+      // 2. Performance (Tính trên toàn bộ 4000 dòng tải về)
+      if (!r["Load liệu"] || r["Load liệu"] === "") {
          if (planDate && planDate < today) {
             unloadedQtyTotal += qty;
             performance.waiting += qty;
          }
       } else {
          if (planDate && actualLoadDate) {
-            if (actualLoadDate < planDate) {
+            const pTime = planDate.setHours(0,0,0,0);
+            const aTime = actualLoadDate.setHours(0,0,0,0);
+            if (aTime < pTime) {
                performance.early += qty;
-            } else if (actualLoadDate.getTime() === planDate.getTime()) {
+            } else if (aTime === pTime) {
                performance.onTime += qty;
             } else {
                performance.late += qty;
@@ -427,12 +438,12 @@
         });
     }
 
-    // Chart 3: Hiệu suất Load liệu
+    // Chart 3: Phân tích hiệu suất Load liệu
     if(chartLateRef) chartLateRef.destroy();
     chartLateRef = new Chart(document.getElementById('chartLoadPerformance'), {
       type: 'bar',
       data: {
-        labels: ['Trước hạn', 'Đúng hạn', 'Trễ hạn', 'Chưa Load (Quá hạn)'],
+        labels: ['Trước hạn', 'Đúng hạn', 'Trễ hạn', 'Chưa Load (Trễ)'],
         datasets: [{
           label: 'Sản lượng (Đôi)',
           data: [performance.early, performance.onTime, performance.late, performance.waiting],
