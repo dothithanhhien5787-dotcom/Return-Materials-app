@@ -321,43 +321,50 @@
     };
 
     let totalOrders = data.length;
+    let totalQtyAll = 0;
     let brands = {};
     let materialsPU = {};
-    let lateLoadCount = 0;
-    let lateFinishCount = 0;
+    let totalLateLoadQty = 0;
+    let totalLateFinishQty = 0;
     
-    // Thống kê trễ theo Mã khuôn (Mold#)
     let moldProgress = {}; 
 
     data.forEach(r => {
       let b = r.Brand || 'Khác';
       let mold = r["Mold#"] || 'N/A';
+      let qty = parseFloat(r["PO Q'TY"]) || 0;
+      
+      totalQtyAll += qty;
       brands[b] = (brands[b] || 0) + 1;
       if(r.PU) materialsPU[r.PU] = (materialsPU[r.PU] || 0) + 1;
 
-      if(!moldProgress[mold]) moldProgress[mold] = { lateLoad: 0, lateFinish: 0, totalLate: 0 };
+      if(!moldProgress[mold]) moldProgress[mold] = { lateLoadQty: 0, lateFinishQty: 0, totalLateQty: 0 };
 
-      // Kiểm tra trễ Load
+      // Kiểm tra trễ Load (AA vs K)
       const planLoad = parseDMY(r["Load material"]);
       if (planLoad && !r["Load liệu"] && planLoad < today) {
-        lateLoadCount++;
-        moldProgress[mold].lateLoad++;
-        moldProgress[mold].totalLate++;
+        totalLateLoadQty += qty;
+        moldProgress[mold].lateLoadQty += qty;
+        moldProgress[mold].totalLateQty += qty;
       }
 
-      // Kiểm tra trễ Finish
+      // Kiểm tra trễ Finish (P vs N)
       const planFinish = parseDMY(r["Molding Date"]);
       if (planFinish && !r["Finished date"] && planFinish < today) {
-        lateFinishCount++;
-        moldProgress[mold].lateFinish++;
-        moldProgress[mold].totalLate++;
+        totalLateFinishQty += qty;
+        moldProgress[mold].lateFinishQty += qty;
+        moldProgress[mold].totalLateQty += qty;
       }
     });
 
     document.getElementById('db-total-orders').innerText = totalOrders.toLocaleString();
-    document.getElementById('db-late-load').innerText = lateLoadCount.toLocaleString();
-    document.getElementById('db-late-finish').innerText = lateFinishCount.toLocaleString();
+    document.getElementById('db-late-load').innerText = Math.round(totalLateLoadQty).toLocaleString();
+    document.getElementById('db-late-finish').innerText = Math.round(totalLateFinishQty).toLocaleString();
     document.getElementById('db-total-brands').innerText = Object.keys(brands).length;
+    
+    // Đổi nhãn trong UI để người dùng biết là tính theo ĐÔI
+    document.querySelector('#db-late-load').parentElement.querySelector('div').innerText = "🕒 TRỄ LOAD (ĐÔI)";
+    document.querySelector('#db-late-finish').parentElement.querySelector('div').innerText = "⚠️ TRỄ FINISH (ĐÔI)";
 
     // Biểu đồ Brand
     const brandLabelsList = Object.keys(brands);
@@ -374,10 +381,10 @@
       options: { responsive: true, plugins: { legend: { position: 'right', labels: { font: { size: 9 } } } } }
     });
 
-    // Biểu đồ Trễ theo Mã Khuôn (Top 10 Mold# trễ nhất)
+    // Biểu đồ Trễ theo Mã Khuôn (Top 10 Mold# trễ nhất theo SẢN LƯỢNG)
     const sortedMolds = Object.entries(moldProgress)
-      .filter(x => x[1].totalLate > 0)
-      .sort((a,b) => b[1].totalLate - a[1].totalLate)
+      .filter(x => x[1].totalLateQty > 0)
+      .sort((a,b) => b[1].totalLateQty - a[1].totalLateQty)
       .slice(0, 10);
 
     if(chartLateRef) chartLateRef.destroy();
@@ -386,15 +393,18 @@
       data: {
         labels: sortedMolds.map(x => x[0]),
         datasets: [
-          { label: 'Trễ Load', data: sortedMolds.map(x => x[1].lateLoad), backgroundColor: '#fb8c00' },
-          { label: 'Trễ Finish', data: sortedMolds.map(x => x[1].lateFinish), backgroundColor: '#d81b60' }
+          { label: 'Sản lượng trễ Load', data: sortedMolds.map(x => x[1].lateLoadQty), backgroundColor: '#fb8c00' },
+          { label: 'Sản lượng trễ Finish', data: sortedMolds.map(x => x[1].lateFinishQty), backgroundColor: '#d81b60' }
         ]
       },
       options: { 
         indexAxis: 'y',
         responsive: true, 
         scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } },
-        plugins: { title: { display: true, text: 'TOP 10 MÃ KHUÔN TRỄ NHẤT (ĐƠN)' } }
+        plugins: { 
+            title: { display: true, text: 'TOP 10 MÃ KHUÔN TRỄ NHẤT (SẢN LƯỢNG ĐÔI)' },
+            legend: { labels: { font: { size: 10 } } }
+        }
       }
     });
 
