@@ -426,20 +426,6 @@
       }
     });
   }
-  }
-
-    // Biểu đồ Vật tư
-    const topPU = Object.entries(materialsPU).sort((a,b) => b[1] - a[1]).slice(0, 8);
-    if(chartMaterialsRef) chartMaterialsRef.destroy();
-    chartMaterialsRef = new Chart(document.getElementById('chartMaterials'), {
-      type: 'bar',
-      data: {
-        labels: topPU.map(x => x[0]),
-        datasets: [{ label: 'Lượt dùng', data: topPU.map(x => x[1]), backgroundColor: '#455a64' }]
-      },
-      options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } } }
-    });
-  }
 
   // Chạy lần đầu khi mở app
   loadDashboard();
