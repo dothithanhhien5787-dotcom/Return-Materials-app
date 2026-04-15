@@ -1,0 +1,24 @@
+name: Auto Sync Data from SharePoint
+
+on:
+  schedule:
+    - cron: '0 * * * *' # Chạy mỗi 1 tiếng 1 lần (vào phút thứ 0)
+  workflow_dispatch: # Cho phép nhấn nút chạy thủ công trên GitHub
+
+jobs:
+  sync_job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install xlsx @supabase/supabase-js
+
+      - name: Run Sync Script
+        run: node sync.js

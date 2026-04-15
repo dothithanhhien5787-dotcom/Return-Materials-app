@@ -1,9 +1,13 @@
 const XLSX = require('xlsx');
 const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
+const https = require('https');
+const fs = require('fs');
 
 // CONFIG
-const EXCEL_FILE = path.join(__dirname, 'Return NVL.xlsx');
+const EXCEL_URL = 'https://ortholitevietnam.sharepoint.com/:x:/s/production9/IQAL2XyY96biSKz7OewO0UGoARRvcAJKgJxn2ReYwSzPDX0?download=1';
+const LOCAL_FILE = path.join(__dirname, 'Return NVL.xlsx');
+const DOWNLOADED_FILE = path.join(__dirname, 'temp_sync.xlsx');
 const SHEET_NAME = 'data';
 const SB_URL = 'https://vrhuzisclglurlmbluzg.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZyaHV6aXNjbGdsdXJsbWJsdXpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDM3NTUsImV4cCI6MjA5MTExOTc1NX0.DP3iscBkcDumiwhOs9mlS3nKGV-jIRXFGJ6NRT7wAic';
