@@ -14,104 +14,100 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 
 const supabase = createClient(SB_URL, SB_KEY);
 
-// Các cột ngày tháng
-const DATE_COLUMNS = [
-  'Load material', 'Laminate Date', 'Sawing cutting date', 
-  'Molding Date', 'Cutting Pairs Date', 'Finished date', 'Load liệu'
-];
+const DATE_COLUMNS_INDICES = [10, 11, 12, 13, 14, 15, 26, 33]; // Cac cot ngay thang (Load material, ..., AH)
 
-// Các cột số (Ép định dạng số)
-const NUMBER_COLUMNS = [
-  'Dosage Pu', 'Dosage Fabric', "PO Q'TY", 'Leadtime'
-];
+// Ham tai file tu URL (Ho tro Redirect)
+function downloadFile(url, dest) {
+  return new Promise((resolve, reject) => {
+    https.get(url, (response) => {
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        return downloadFile(response.headers.location, dest).then(resolve).catch(reject);
+      }
+      if (response.statusCode !== 200) {
+        return reject(new Error(`Tải tệp thất bại: ${response.statusCode}`));
+      }
+      const file = fs.createWriteStream(dest);
+      response.pipe(file);
+      file.on('finish', () => {
+        file.close(() => resolve(dest));
+      });
+    }).on('error', (err) => {
+      fs.unlink(dest, () => reject(err));
+    });
+  });
+}
 
-// Hàm lấy giá trị số từ Excel (Xử lý trường hợp bị biến thành Date)
-function getExcelNumber(val) {
-  if (typeof val === 'number') return val;
+function formatExcelDate(val) {
   if (val instanceof Date) {
-    // Chuyển ngược Date về Serial Number của Excel (Xấp xỉ)
-    return (val.getTime() - new Date(1899, 11, 30).getTime()) / (24 * 60 * 60 * 1000);
+    let d = String(val.getDate()).padStart(2, '0');
+    let m = String(val.getMonth() + 1).padStart(2, '0');
+    let y = val.getFullYear();
+    return `${d}/${m}/${y}`;
+  } else if (typeof val === 'number') {
+    const dateObj = XLSX.SSF.parse_date_code(val);
+    let d = String(dateObj.d).padStart(2, '0');
+    let m = String(dateObj.m).padStart(2, '0');
+    let y = dateObj.y || new Date().getFullYear();
+    return `${d}/${m}/${y}`;
   }
-  if (typeof val === 'string') {
-    let n = parseFloat(val.replace(/,/g, ''));
-    return isNaN(n) ? null : n;
-  }
-  return null;
+  return val;
 }
 
 async function sync() {
-  console.log('🚀 Đang bắt đầu đồng bộ (Bản vá cột số và ngày tháng)...');
+  console.log('🚀 Bắt đầu đồng bộ...');
+  let targetFile = LOCAL_FILE;
   
   try {
-    const workbook = XLSX.readFile(EXCEL_FILE, { cellDates: true });
+    if (EXCEL_URL) {
+       console.log('📡 Đang tải bản mới từ SharePoint...');
+       try {
+         await downloadFile(EXCEL_URL, DOWNLOADED_FILE);
+         targetFile = DOWNLOADED_FILE;
+       } catch (e) {
+         console.log('⚠️ Không tải được bản Cloud, dùng bản Local thay thế.');
+       }
+    }
+
+    const workbook = XLSX.readFile(targetFile, { cellDates: true });
     const sheet = workbook.Sheets[SHEET_NAME];
-    if (!sheet) throw new Error(`Không tìm thấy sheet "${SHEET_NAME}"`);
-    
-    const data = XLSX.utils.sheet_to_json(sheet);
-    console.log(`📦 Đã đọc ${data.length} dòng từ Excel.`);
+    if (!sheet) throw new Error(`Không thấy sheet "${SHEET_NAME}"`);
 
-    const processedData = data.map(row => {
-      const newRow = {};
-      
-      // Trim tất cả các tên cột (keys) để tránh lỗi khoảng trắng dư thừa
-      Object.keys(row).forEach(key => {
-        const trimmedKey = key.trim();
-        newRow[trimmedKey] = row[key];
-      });
+    const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+    const headers = rawData[0];
+    const AH_INDEX = 33;
 
-      // 1. Xử lý các cột Số
-      NUMBER_COLUMNS.forEach(col => {
-        if (newRow[col] !== undefined && newRow[col] !== null) {
-          newRow[col] = getExcelNumber(newRow[col]);
+    const processedData = rawData.slice(1).filter(row => {
+      // LOC THEO YEU CAU: Chi lay don hang co ngay o cot AH (index 33)
+      const ahValue = row[AH_INDEX];
+      return ahValue !== "" && ahValue !== undefined && ahValue !== null;
+    }).map(row => {
+      let newRow = {};
+      headers.forEach((h, i) => {
+        if (!h) return;
+        let val = row[i];
+        if (DATE_COLUMNS_INDICES.includes(i)) {
+          val = formatExcelDate(val);
         }
-      });
-
-      // 2. Xử lý các cột Ngày tháng
-      DATE_COLUMNS.forEach(col => {
-        if (newRow[col]) {
-          let val = newRow[col];
-          let d, m, y;
-          
-          if (val instanceof Date) {
-            d = String(val.getDate()).padStart(2, '0');
-            m = String(val.getMonth() + 1).padStart(2, '0');
-            y = val.getFullYear();
-            newRow[col] = `${d}/${m}/${y}`;
-          } 
-          else if (typeof val === 'number') {
-            const dateObj = XLSX.SSF.parse_date_code(val);
-            y = dateObj.y || new Date().getFullYear();
-            m = String(dateObj.m).padStart(2, '0');
-            d = String(dateObj.d).padStart(2, '0');
-            newRow[col] = `${d}/${m}/${y}`;
-          } 
-          else if (typeof val === 'string' && val.includes('H')) { // Xử lý các chuỗi ISO
-             const dateObj = new Date(val);
-             if (!isNaN(dateObj.getTime())) {
-                d = String(dateObj.getDate()).padStart(2, '0');
-                m = String(dateObj.getMonth() + 1).padStart(2, '0');
-                y = dateObj.getFullYear();
-                newRow[col] = `${d}/${m}/${y}`;
-             }
-          }
-        }
+        newRow[h.trim()] = val;
       });
       return newRow;
     });
 
-    console.log('🗑️  Làm sạch return_nvl...');
-    const { error: delErr } = await supabase.from('return_nvl').delete().neq('id', 0);
-    if (delErr) throw delErr;
+    console.log(`🎯 Số đơn hàng thỏa mãn (có ngày AH): ${processedData.length}`);
 
-    const batchSize = 300;
-    for (let i = 0; i < processedData.length; i += batchSize) {
-      const batch = processedData.slice(i, i + batchSize);
-      const { error: insErr } = await supabase.from('return_nvl').insert(batch);
-      if (insErr) throw insErr;
-      console.log(`✅ Đã đẩy: ${i + batch.length}/${processedData.length}`);
+    console.log('🗑️  Xóa data cũ...');
+    await supabase.from('return_nvl').delete().neq('id', 0);
+
+    if (processedData.length > 0) {
+      const batchSize = 300;
+      for (let i = 0; i < processedData.length; i += batchSize) {
+        const batch = processedData.slice(i, i + batchSize);
+        await supabase.from('return_nvl').insert(batch);
+        console.log(`✅ Đã đẩy: ${i + batch.length}/${processedData.length}`);
+      }
     }
 
-    console.log('✨ Đã sửa lỗi toàn bộ cột Số và Ngày tháng!');
+    console.log('✨ HOÀN TẤT ĐỒNG BỘ!');
   } catch (err) {
     console.error('💥 Lỗi:', err.message);
   }
