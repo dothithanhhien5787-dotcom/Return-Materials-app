@@ -6,6 +6,7 @@
     <title>ORTHOLITE - Quản Trị Sản Lượng Real-time</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
@@ -245,14 +246,25 @@
         document.getElementById('v-done-qty').innerText = Math.round(stats.doneQty).toLocaleString();
 
         drawChart('perfChart', 'bar', {
-            labels: ['Trước hạn', 'Đúng hạn', 'Sau hạn (Trễ)', 'CHƯA LOAD (TRỄ)'],
+            labels: ['Xa ETD (Trước hạn)', 'Đúng ETD', 'Trễ ETD', 'CHƯA LOAD (TRỄ)'],
             datasets: [{
                 label: 'Sản lượng đôi',
                 data: [stats.perf.early, stats.perf.ontime, stats.perf.late, stats.perf.backlog],
                 backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'],
-                borderRadius: 10
+                borderRadius: 8
             }]
-        }, { indexAxis: 'y', plugins: { legend: { display: false } } });
+        }, { 
+            plugins: { 
+                legend: { display: false },
+                datalabels: {
+                    anchor: 'end',
+                    align: 'top',
+                    formatter: (v) => v > 0 ? Math.round(v).toLocaleString() : '',
+                    font: { weight: 'bold', size: 11 }
+                }
+            },
+            scales: { y: { beginAtZero: true, grid: { display : false } } }
+        }, [ChartDataLabels]);
 
         drawChart('custChart', 'doughnut', {
             labels: Object.keys(dcMap).slice(0, 10),
@@ -283,10 +295,11 @@
         `).join('');
     }
 
-    function drawChart(id, type, data, options) {
+    function drawChart(id, type, data, options, plugins = []) {
         if (currentCharts[id]) currentCharts[id].destroy();
         currentCharts[id] = new Chart(document.getElementById(id), {
-            type, data, options: { ...options, responsive: true, maintainAspectRatio: false }
+            type, data, options: { ...options, responsive: true, maintainAspectRatio: false },
+            plugins: plugins
         });
     }
 
