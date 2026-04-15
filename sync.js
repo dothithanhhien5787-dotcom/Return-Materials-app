@@ -76,24 +76,46 @@ async function sync() {
     const headers = rawData[0];
     const AH_INDEX = 33;
 
-    const processedData = rawData.slice(1).filter(row => {
-      // LOC THEO YEU CAU: Chi lay don hang co ngay o cot AH (index 33)
-      const ahValue = row[AH_INDEX];
-      return ahValue !== "" && ahValue !== undefined && ahValue !== null;
-    }).map(row => {
+    const sheet = workbook.Sheets[SHEET_NAME];
+    // Ep doc den cot AH (cot 34)
+    const range = XLSX.utils.decode_range(sheet['!ref']);
+    if (range.e.c < 33) range.e.c = 33; 
+    sheet['!ref'] = XLSX.utils.encode_range(range);
+
+    const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+    const headers = rawData[0];
+    const AH_INDEX = 33; // AH
+
+    const processedData = rawData.slice(1).map(row => {
       let newRow = {};
       headers.forEach((h, i) => {
-        if (!h) return;
+        let headerName = h ? h.trim() : "";
+        if (i === AH_INDEX && !headerName) headerName = "Actual_AH";
+        if (!headerName) return;
+
         let val = row[i];
-        if (DATE_COLUMNS_INDICES.includes(i)) {
-          val = formatExcelDate(val);
+        
+        // Dinh dang Ngay thang cho cac cot (L=11, AH=33, AA=26, Load material=10)
+        if (i === 10 || i === 11 || i === 26 || i === 33 || headerName.toLowerCase().includes('date')) {
+          if (val instanceof Date) {
+            let d = String(val.getDate()).padStart(2, '0');
+            let m = String(val.getMonth() + 1).padStart(2, '0');
+            let y = val.getFullYear();
+            val = `${d}/${m}/${y}`;
+          } else if (typeof val === 'number') {
+            const dateObj = XLSX.SSF.parse_date_code(val);
+            let d = String(dateObj.d).padStart(2, '0');
+            let m = String(dateObj.m).padStart(2, '0');
+            let y = dateObj.y || new Date().getFullYear();
+            val = `${d}/${m}/${y}`;
+          }
         }
-        newRow[h.trim()] = val;
+        newRow[headerName] = val;
       });
       return newRow;
     });
 
-    console.log(`🎯 Số đơn hàng thỏa mãn (có ngày AH): ${processedData.length}`);
+    console.log(`🎯 Tổng số đơn hàng được đồng bộ: ${processedData.length}`);
 
     console.log('🗑️  Xóa data cũ...');
     await supabase.from('return_nvl').delete().neq('id', 0);
