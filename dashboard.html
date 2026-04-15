@@ -218,14 +218,14 @@
         data.forEach(r => {
             const qty = parseFloat(r["PO Q'TY"]) || 0;
             const planL = flexParseDate(r["Laminate Date"]); // COT L
-            const actualAH = flexParseDate(r["Actual_AH"]);   // COT AH
+            const actualAH = flexParseDate(r["Finished date"]);   // COT AH
             const mold = (r["Mold#"] || "").trim();
             const isMolded = mold.toUpperCase().startsWith('O');
             const pObj = isMolded ? stats.perfM : stats.perfD;
 
             stats.total += qty;
 
-            if (!r["Actual_AH"] || r["Actual_AH"] === "") {
+            if (!r["Finished date"] || r["Finished date"] === "") {
                 // CHƯA XONG
                 if (planL && planL < today) {
                     stats.lateLoad += qty;
