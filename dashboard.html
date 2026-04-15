@@ -139,20 +139,25 @@
 
 <div class="grid-charts">
     <div class="chart-box">
-        <div class="chart-header">HIỆU SUẤT LOAD LIỆU TỔNG QUÁT (SẢN LƯỢNG)</div>
-        <canvas id="perfChart" height="280"></canvas>
+        <div class="chart-header">HIỆU SUẤT: MOLDED (KHUÔN 'O')</div>
+        <canvas id="moldedPerfChart" height="250"></canvas>
     </div>
+    <div class="chart-box">
+        <div class="chart-header">HIỆU SUẤT: DIE CUT (CÁC LOẠI KHÁC)</div>
+        <canvas id="diecutPerfChart" height="250"></canvas>
+    </div>
+</div>
+
+<div class="grid-charts" style="grid-template-columns: 1fr 1fr; margin-top:25px;">
     <div class="chart-box">
         <div class="chart-header">PHÂN BỔ THEO KHÁCH HÀNG (DC)</div>
         <canvas id="custChart" height="280"></canvas>
     </div>
-</div>
-
-<div class="grid-charts" style="grid-template-columns: 1fr 1fr;">
     <div class="chart-box">
-        <div class="chart-header">TOP 10 KHUÔN (MOLD#) CHIẾM SẢN LƯỢNG LỚN</div>
-        <canvas id="moldChart" height="300"></canvas>
+        <div class="chart-header">TOP 10 MÃ KHUÔN (MOLD#) CHIẾM SẢN LƯỢNG</div>
+        <canvas id="moldChart" height="280"></canvas>
     </div>
+</div>
     <div class="table-area">
         <div class="chart-header">DANH SÁCH ĐƠN HÀNG TRỄ (CẦN XỬ LÝ GẤP)</div>
         <div style="max-height: 400px; overflow-y: auto;">
@@ -201,7 +206,11 @@
         const monday = new Date(new Date(today).setDate(diff));
         const sunday = new Date(new Date(monday).setDate(monday.getDate() + 6));
 
-        let stats = { weekQty:0, weekOrders:0, lateQty:0, waitQty:0, doneQty:0, perf: { early:0, ontime:0, late:0, backlog:0 } };
+        let stats = { 
+            weekQty:0, weekOrders:0, lateQty:0, waitQty:0, doneQty:0, 
+            perfM: { early:0, ontime:0, late:0, backlog:0 }, // Molded
+            perfD: { early:0, ontime:0, late:0, backlog:0 }  // Diecut
+        };
         let dcMap = {}; let moldMap = {}; let lates = [];
 
         data.forEach(r => {
@@ -210,6 +219,8 @@
             const actual = flexParseDate(r["Load liệu"]);
             const cust = r.Customer || 'Khác';
             const mold = r["Mold#"] || 'N/A';
+            const isMolded = mold.trim().toUpperCase().startsWith('O');
+            const perfObj = isMolded ? stats.perfM : stats.perfD;
 
             if (plan && plan >= monday && plan <= sunday) {
                 stats.weekQty += qty; stats.weekOrders++;
@@ -220,7 +231,7 @@
 
             if (!r["Load liệu"] || r["Load liệu"] === "") {
                 if (plan && plan < today) {
-                    stats.lateQty += qty; stats.perf.backlog += qty;
+                    stats.lateQty += qty; perfObj.backlog += qty;
                     lates.push({ mold, cust, qty, plan: r["Load material"] });
                 } else { stats.waitQty += qty; }
             } else {
@@ -228,9 +239,9 @@
                 if (plan && actual) {
                     const pT = new Date(plan).setHours(0,0,0,0);
                     const aT = new Date(actual).setHours(0,0,0,0);
-                    if (aT < pT) stats.perf.early += qty;
-                    else if (aT === pT) stats.perf.ontime += qty;
-                    else stats.perf.late += qty;
+                    if (aT < pT) perfObj.early += qty;
+                    else if (aT === pT) perfObj.ontime += qty;
+                    else perfObj.late += qty;
                 }
             }
         });
@@ -245,26 +256,38 @@
         document.getElementById('v-wait-qty').innerText = Math.round(stats.waitQty).toLocaleString();
         document.getElementById('v-done-qty').innerText = Math.round(stats.doneQty).toLocaleString();
 
-        drawChart('perfChart', 'bar', {
-            labels: ['Xa ETD (Trước hạn)', 'Đúng ETD', 'Trễ ETD', 'CHƯA LOAD (TRỄ)'],
-            datasets: [{
-                label: 'Sản lượng đôi',
-                data: [stats.perf.early, stats.perf.ontime, stats.perf.late, stats.perf.backlog],
-                backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'],
-                borderRadius: 8
-            }]
-        }, { 
+        const commonOptions = { 
             plugins: { 
                 legend: { display: false },
                 datalabels: {
                     anchor: 'end',
                     align: 'top',
                     formatter: (v) => v > 0 ? Math.round(v).toLocaleString() : '',
-                    font: { weight: 'bold', size: 11 }
+                    font: { weight: 'bold', size: 10 }
                 }
             },
             scales: { y: { beginAtZero: true, grid: { display : false } } }
-        }, [ChartDataLabels]);
+        };
+
+        // 1. Molded Chart
+        drawChart('moldedPerfChart', 'bar', {
+            labels: ['Xa ETD', 'Đúng ETD', 'Trễ ETD', 'CHƯA LOAD'],
+            datasets: [{
+                data: [stats.perfM.early, stats.perfM.ontime, stats.perfM.late, stats.perfM.backlog],
+                backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'],
+                borderRadius: 6
+            }]
+        }, commonOptions, [ChartDataLabels]);
+
+        // 2. Diecut Chart
+        drawChart('diecutPerfChart', 'bar', {
+            labels: ['Xa ETD', 'Đúng ETD', 'Trễ ETD', 'CHƯA LOAD'],
+            datasets: [{
+                data: [stats.perfD.early, stats.perfD.ontime, stats.perfD.late, stats.perfD.backlog],
+                backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'],
+                borderRadius: 6
+            }]
+        }, commonOptions, [ChartDataLabels]);
 
         drawChart('custChart', 'doughnut', {
             labels: Object.keys(dcMap).slice(0, 10),
