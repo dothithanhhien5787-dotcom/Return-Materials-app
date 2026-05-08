@@ -33,7 +33,7 @@ function formatExcelDate(val) {
     // File Excel duoc tao o Viet Nam (UTC+7).
     // XLSX doc voi cellDates:true luu ngay theo UTC midnight,
     // nen can cong them 7h de chuyen ve dung ngay Viet Nam.
-    const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+    const VN_OFFSET_MS = 8 * 60 * 60 * 1000; // Timestamps trong Excel la UTC+8 (16:59 UTC + 8h = 00:59 ngay hom sau)
     const vnDate = new Date(val.getTime() + VN_OFFSET_MS);
     let d = String(vnDate.getUTCDate()).padStart(2, '0');
     let m = String(vnDate.getUTCMonth() + 1).padStart(2, '0');
