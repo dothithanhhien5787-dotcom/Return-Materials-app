@@ -333,7 +333,8 @@
           puQty: parseFloat(row['Dosage Pu']) || 0,
           vai: row['Cloth 365'],
           vaiQty: parseFloat(row['Dosage Fabric']) || 0,
-          cloth: row['Cloth']
+          cloth: row['Cloth'],
+          dateLoad: row['Load liệu'] || ''  // Cột AA trong Excel
         });
       });
 
@@ -372,10 +373,14 @@
       groups[key].rpros.add(item.rpro);
     });
 
+    // Lấy ngày Load liệu (cột AA) từ dữ liệu - gộp các ngày unique nếu nhiều đơn
+    const dateLoads = [...new Set(allScannedItems.map(it => it.dateLoad).filter(d => d && d !== ''))];
+    const dateAADisplay = dateLoads.length > 0 ? dateLoads.join(' | ') : '--/--';
+
     // Chuẩn bị dữ liệu để gửi kho (curData)
     curData = {
       rpro: Array.from(scannedRpros).join(' | '),
-      dateAA: new Date().toLocaleDateString('vi-VN'),
+      dateAA: dateAADisplay,
       items: Object.values(groups).map(g => ({
         rpro: Array.from(g.rpros).join(' | '),
         pu: g.pu,
