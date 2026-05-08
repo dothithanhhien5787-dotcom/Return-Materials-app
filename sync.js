@@ -30,9 +30,14 @@ function downloadFile(url, dest) {
 
 function formatExcelDate(val) {
   if (val instanceof Date) {
-    let d = String(val.getDate()).padStart(2, '0');
-    let m = String(val.getMonth() + 1).padStart(2, '0');
-    let y = val.getFullYear();
+    // File Excel duoc tao o Viet Nam (UTC+7).
+    // XLSX doc voi cellDates:true luu ngay theo UTC midnight,
+    // nen can cong them 7h de chuyen ve dung ngay Viet Nam.
+    const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+    const vnDate = new Date(val.getTime() + VN_OFFSET_MS);
+    let d = String(vnDate.getUTCDate()).padStart(2, '0');
+    let m = String(vnDate.getUTCMonth() + 1).padStart(2, '0');
+    let y = vnDate.getUTCFullYear();
     return `${d}/${m}/${y}`;
   } else if (typeof val === 'number') {
     try {
